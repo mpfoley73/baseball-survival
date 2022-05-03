@@ -1,0 +1,184 @@
+---
+title: "A Young Man's Game"
+author: "Michael Foley"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    css: "style.css"
+    theme: flatly
+    toc: true
+    toc_float: true
+    highlight: haddock
+    code_folding: show
+knit: (function(inputFile, encoding) {
+  rmarkdown::render(inputFile, encoding = encoding, output_dir = "../docs") })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE
+)
+```
+
+A major league baseball player can expect to last into the player's mid-thirties. Advances in sports training might extend careers. Using a data set compiled by Retrosheet of every person who has played in a Major League game, this analysis investigates changes in career expectations.
+
+This report is a detailed work log. The final report is published here, and a summarized account is in the repository ReadMe and blog.
+
+## Setup
+
+In addition to the usual packages, include **survival** for modeling, **survminer** for visualization, and **gtsummary** for summaries.
+
+```{r warning=FALSE, message=FALSE}
+library(tidyverse)
+library(janitor)
+library(scales)
+library(lubridate)
+library(survival)
+library(survminer)
+library(gtsummary)
+```
+
+## Data Management
+
+Retrosheet publishes biographical information of every person who has ever played Major League baseball ([link to codebook and file](https://www.retrosheet.org/biofile.htm)). 
+
+```{r}
+# Treat all cols as character initially, then transform in later steps.
+bio_0 <- readr::read_csv(
+  file.path("../data/BIOFILE.TXT"), 
+  col_types = paste(rep("c", 33), collapse = "")
+)
+```
+
+The file consists of `r ncol(bio_0)` columns and `r nrow(bio_0) %>% comma(1)` rows, one row per player, manager/coach, and umpire. The column definitions are in the file link above. Players are identified by column `PLAY DEBUT`. Let's reduce the data set to just the player rows and cols, drop irrelevant/unused cols, and adopt snake-case for the names.
+
+```{r}
+bio_1 <- bio_0 %>%
+  filter(!is.na(`PLAY DEBUT`)) %>%
+  select(-c(`MGR DEBUT`:`UMP LASTGAME`, `NAME CHG`, `BAT CHG`, `BIRTH NAME`)) %>% 
+  clean_names(case = "snake")
+
+skimr::skim(bio_1)
+```
+
+That reduces the data set to `r nrow(bio_1) %>% comma(1)` x `r ncol(bio_1)`. To support survival models, we need to create some time length calculations. The date fields better be sound. Working through the time length calculations, some data irregularities are evident. I'll manually fix them here.
+
+```{r}
+bio_2 <- bio_1 %>%
+  mutate(
+    # Birth dates with unknown day are in format MM/ /YYYY. Impute mid-month.
+    birthdate = str_replace(birthdate, " ", "15"),
+    # Dan McGarvey has a typo!
+    birthdate = if_else(birthdate == "12/2/2887", "12/2/1887", birthdate),
+    # Andrew Carignan was not born in 1868!
+    birthdate = if_else(playerid == "caria001", "07/23/1986", birthdate),
+    # Melvin Dorta is not dead.
+    deathdate = if_else(playerid == "dortm001", NA_character_, deathdate),
+    # Mike Marshall is.
+    deathdate = if_else(playerid == "marsm101", "05/31/2021", deathdate),
+    across(contains(c("date", "debut", "lastgame")), mdy)
+  )
+```
+
+Now the data is prepped for the time length calculations. There are three good ways to look at longevity: player lifetimes, their career lengths, and their age at the end of their career. 
+
+```{r}
+# last file update: 12/2/2021
+bio_last_updated <- ymd("20211202")
+
+# Accurate time frames are key. We need to be careful with missing birth dates, 
+# and null death dates (which may be incorrectly inferred as living).
+bio_3 <- bio_2 %>%
+  mutate(
+    life_yrs = time_length(interval(birthdate, coalesce(deathdate, bio_last_updated)), "years"),
+    # If person is over 110 years old, or the deathdate is null but there is 
+    # some other indicator of death, then we just do not know how long they 
+    # lived.
+    life_yrs = if_else(life_yrs > 110 | 
+                         (is.na(deathdate) & (
+                           !is.na(death_city) | 
+                             !is.na(death_state) | !is.na(death_country) |
+                             !is.na(cemetery) | !is.na(ceme_city) | 
+                             !is.na(ceme_state) | !is.na(ceme_country) | 
+                             !is.na(ceme_note))), NA_real_, life_yrs),
+    career_yrs = time_length(interval(play_debut, play_lastgame), "years"),
+    play_lastgame_life_yrs = time_length(interval(birthdate, play_lastgame), "years"),
+    # Event status (1 = event, 0 = censor)
+    life_status = case_when(
+      is.na(life_yrs) ~ NA_integer_,  # don't know
+      !is.na(deathdate) ~ 1L,  # died
+      TRUE ~ 0L  # alive
+    ),
+    yrs_since_play_lastgame = time_length(interval(play_lastgame, bio_last_updated), "years"),
+    career_status = case_when(
+      is.na(career_yrs) ~ NA_integer_,  # don't know
+      yrs_since_play_lastgame > 2 ~ 1L,  # no longer playing
+      TRUE ~ 0L # still playing
+    ) 
+  ) %>%
+  select(-yrs_since_play_lastgame)
+```
+
+One more data change. The height column is in format FT-IN. Split it apart to calculate their height in inches.
+
+```{r}
+bio_4 <- bio_3 %>%
+  mutate(
+    # Heights formatted as FT-IN. Convert to inches.
+    tmp_height = map(height, ~str_split(.x, "-", n = 2) %>% pluck(1)),
+    tmp_height_ft = map_dbl(tmp_height, ~if_else(is.null(.x), "", pluck(.x, 1)) %>% as.numeric()),
+    tmp_height_in = map_dbl(tmp_height, ~if_else(is.null(.x), "", pluck(.x, 2)) %>% as.numeric()),
+    tmp_height_ft_2 = if_else(tmp_height_ft <= 7, tmp_height_ft, NA_real_),
+    height_in = tmp_height_ft_2 * 12 + tmp_height_in,
+    weight = as.numeric(weight)
+  ) %>% select(!starts_with("tmp_"))
+```
+
+Chuck the cols we don't need. Let's have a final look at the data.
+
+```{r}
+bio <- bio_4 %>%
+  select(-c(starts_with("death_"), starts_with("ceme")))
+
+skimr::skim(bio)
+```
+
+## Exploration
+
+```{r}
+bio %>% filter(!is.na(play_debut) & is.na(play_lastgame))
+bio %>% filter(last == "Ramirez" & nickname == "Jose")
+# The average player is about 20lbs heavier than in 1950...
+bio %>% 
+  # Data includes umps
+  filter(!is.na(play_debut)) %>%
+  mutate(yr = lubridate::year(birthdate)) %>%
+  ggplot(aes(x = yr, y = weight)) + geom_point() + geom_smooth(method = "lm")
+
+# ...and an inch taller.
+bio %>% 
+  # Data includes umps
+  filter(!is.na(play_debut)) %>%
+  mutate(yr = lubridate::year(birthdate)) %>%
+  ggplot(aes(x = yr, y = height_in)) + geom_point() + geom_smooth(method = "lm")
+
+# Switch-hitters are more likely to join the Hall. Next best is batting left.
+bio %>%
+  tabyl(bats, hof) %>%
+  adorn_percentages(denominator = "row") %>%
+  adorn_pct_formatting() %>%
+  adorn_ns() %>%
+  kableExtra::kbl()
+
+# ...but it's better to throw right-handed
+bio %>%
+  tabyl(throws, hof) %>%
+  adorn_percentages(denominator = "row") %>%
+  adorn_pct_formatting() %>%
+  adorn_ns() %>%
+  kableExtra::kbl()
+```
+
+# KM
+
+km_fit <- survfit(Surv(life_yrs))
