@@ -29,3 +29,7 @@ From the perspective of a practicing data analyst, this project presented intere
 
 I worked on this project independently. I may revisit it after learning more about time series methods, but I consider this project closed.
 
+## References
+
+[Baseball Data Science](https://www.baseballdatascience.com/survival-analysis-how-long-do-careers-last/)
+
