@@ -38,6 +38,8 @@ library(survival)
 library(survminer)
 library(gtsummary)
 
+# More color palettes here:
+# https://www.schemecolor.com/tag/mlb
 mlb_palette <- c("navy_blue" = "#0C2340", "red" = "#E31937")
 
 mlb_theme <- theme(
@@ -73,8 +75,15 @@ That reduces the data set to `r nrow(bio_1) %>% comma(1)` x `r ncol(bio_1)`. Whi
 ```{r}
 bio_2 <- bio_1 %>%
   mutate(
-    # Birth dates with unknown day are in format MM/ /YYYY. Impute mid-month.
-    birthdate = str_replace(birthdate, " ", "15"),
+    # Birth dates with unknown day have format MM/ /YYYY, MM /YYYY, or MM/YYYY. 
+    # Impute mid-month.
+    birthdate = str_remove_all(birthdate, " "),
+    birthdate = str_replace(birthdate, "\\/\\/", "\\/15\\/"),
+    birthdate = if_else(
+      str_count(birthdate, "\\/") == 1,
+      str_replace(birthdate, "\\/", "\\/15\\/"),
+      birthdate
+    ),
     # Birth dates with unknown month are in format YYYY. Impute mid-year.
     birthdate = if_else(!str_detect(birthdate, "\\/"), 
                         paste0("06/30/", birthdate), birthdate),
@@ -170,51 +179,165 @@ bio_4 <- bio_3 %>%
   select(-c(starts_with("tmp_"), height))
 ```
 
+Anything else interesting? Maybe body-mass index from the height and weight.
+
+```{r}
+bio_5 <- bio_4 %>%
+  mutate(
+    bmi = weight / height_in^2 * 703
+  )
+```
+
 Final look at the data.
 
 ```{r}
-bio <- bio_4
-
+bio <- bio_5
 skimr::skim(bio)
 ```
 
 ## Exploration
 
+This section is primarily univariate analyses to get a feel for the data and to establish expectations for the later survival models.
+
+### Height and Weight
+
+According to a study [published in the journal of eLife](https://elifesciences.org/articles/13410), being taller is associated with enhanced longevity and with higher education, earnings, and social position. The average man born in 1896 grew to 5' 7" (67"). The average for 1996 was 5' 10" (70"). The Retrosheet data indicates baseball players are quite a bit taller (Table 1, Figs. 1-2). The average height for players born in 1896 was 5' 11" (71") and 6' 2" (74") for players born in 1996. Players are getting heavier too. Today's athlete is over 35 pounds heavier than those born 100 years ago. 
+
 ```{r}
-# extrafont::loadfonts(device = "win", quiet = TRUE) 
-bio %>%
+bio %>% 
+  mutate(birthyear = year(birthdate)) %>%
+  filter(birthyear %in% c(1850, 1896, 1996)) %>%
+  gtsummary::tbl_summary(
+    by = birthyear,
+    statistic = list(all_continuous() ~ "{mean}, {median} ({p25}, {p75})"),
+    digits = list(height_in ~ 0, weight ~ 0, bmi ~ 1),
+    include = c("height_in", "weight", "bmi")
+  ) %>% modify_caption("Table 1. MLB pLayer size for select birth years.")
+```
+
+```{r}
+p1 <- bio %>%
   filter(!is.na(birthdate) & !is.na(height_in)) %>%
   mutate(yr = lubridate::year(birthdate)) %>%
   ggplot(aes(x = yr, y = height_in)) +
   geom_point(alpha = .2, color = mlb_palette["navy_blue"]) +
   geom_smooth(method = "lm", formula = "y~x", color = "goldenrod") +
   labs(
-    title = "MLB Players Are Getting Taller.",
+    title = "Fig 1. MLB Players Are Getting Taller.",
     subtitle = "Height by year of birth.",
     y = "height (inches)", x = NULL
   ) +
   theme_light() +
-  mlb_theme
-
-# extrafont::fonttable()
+  mlb_theme 
+p1
 ```
 
+```{r}
+p2 <- bio %>%
+  filter(!is.na(birthdate) & !is.na(weight)) %>%
+  mutate(yr = lubridate::year(birthdate)) %>%
+  ggplot(aes(x = yr, y = weight)) +
+  geom_point(alpha = .2, color = mlb_palette["navy_blue"]) +
+  geom_smooth(method = "lm", formula = "y~x", color = "goldenrod") +
+  labs(
+    title = "Fig 2. MLB Players Are Getting Heavier.",
+    subtitle = "Weight by year of birth.",
+    y = "weight (pounds)", x = NULL
+  ) +
+  theme_light() +
+  mlb_theme 
+p2
+```
+
+Height and weight can be combined into a single measure of mass, the BMI.
+
+$$
+BMI = \frac{weight}{height^2} \times 703
+$$
 
 ```{r}
-# The average player is about 20lbs heavier than in 1950...
-bio %>% 
-  # Data includes umps
-  filter(!is.na(play_debut)) %>%
+p3 <- bio %>%
+  filter(!is.na(birthdate) & !is.na(bmi)) %>%
   mutate(yr = lubridate::year(birthdate)) %>%
-  ggplot(aes(x = yr, y = weight)) + geom_point() + geom_smooth(method = "lm")
+  ggplot(aes(x = yr, y = bmi)) +
+  geom_point(alpha = .2, color = mlb_palette["navy_blue"]) +
+  geom_smooth(method = "lm", formula = "y~x", color = "goldenrod") +
+  labs(
+    title = "Fig 3. MLB Players Are Getting More Massive.",
+    subtitle = "Body Mass Index (BMI) by year of birth.",
+    y = "bmi", x = NULL
+  ) +
+  theme_light() +
+  mlb_theme 
+p3
+```
 
-# ...and an inch taller.
+Does the Retrosheet data confirm the eLife study? No. Correcting for birth year (a secular trend of improving health), each inch of height is associated with 2 *less* months (.17 yrs) of life.
+
+```{r}
 bio %>% 
-  # Data includes umps
-  filter(!is.na(play_debut)) %>%
-  mutate(yr = lubridate::year(birthdate)) %>%
-  ggplot(aes(x = yr, y = height_in)) + geom_point() + geom_smooth(method = "lm")
+  filter(life_status == 1) %>% 
+  mutate(birth_year = year(birthdate)) %>%
+  lm(life_yrs ~ height_in + birth_year, data = .) %>%
+  gtsummary::tbl_regression()
+```
 
+### Handedness {.tabset}
+
+According to [this Psychology Today blog](https://www.psychologytoday.com/us/blog/the-asymmetric-brain/201908/8-new-scientific-findings-about-left-handedness)), about 9% of people are left-handed. However among Major League baseball players the prevalence is much higher. Fig. 4a shows handedness by birth year. The data is a little messy because data is less available for early years, and in the very latest years the proportions are noisy due to low sample size (not very many players today were born after 2000).
+
+Batting left-handed may be as much a product of strategy, or chance as it is a product of handedness. Throwing almost certainly is a product of handedness. You can see that in the number of ambidextrous pitchers - there are amost none. The Psychology Today article suggests cultural norms play a role in handedness. Fig 4b does seem to show an increasing trend in the proportion of left-handed pitchers up until 1950.
+
+```{r}
+plot_p4 <- function(dat) {
+  dat %>%
+    filter(!is.na(birthdate)) %>%
+    mutate(birth_year = year(birthdate)) %>%
+    pivot_longer(cols = c(bats, throws)) %>%
+    mutate(value = factor(value, levels = c("L", "R", "B"), labels = c("Left", "Right", "Both"))) %>%
+    group_by(birth_year, name, value) %>%
+    summarize(.groups = "drop_last", n = n()) %>%
+    mutate(pct = n / sum(n)) %>%
+    ungroup() %>%
+    ggplot(aes(x = birth_year, y = pct, color = value)) +
+    geom_line() +
+    scale_y_continuous(labels = percent_format(1)) +
+    facet_wrap(facets = vars(name)) +
+    theme_light() +
+    mlb_theme +
+    theme(
+      strip.background = element_rect(fill = "#E8D8C4", color = "#C49D6E"),
+      strip.text = element_text(color = "#231F20")) +
+    labs(
+      x = "Birth Year", y = NULL, color = NULL
+    )
+}
+```
+#### Fig 4a
+
+```{r}
+p4a <- bio %>% plot_p4()
+p4a +
+  scale_color_manual(values = c("Left" = "#F4793E", "Right" = "#231F20", "Both" = "#C49D6E", "N/A" = "#E8D8C4")) +
+  labs(title = "Fig 4a. Handeness prevalance (raw).")
+```
+
+#### Fig 4b
+
+```{r}
+p4b <- bio %>% 
+  filter(!is.na(bats) & !is.na(throws)) %>% 
+  plot_p4() +
+  scale_color_manual(values = c("Left" = "#F4793E", "Right" = "#231F20", "Both" = "#C49D6E")) +
+  labs(title = "Fig 4b. Handeness prevalance (cleaned).")
+p4b
+```
+
+### Birthplace
+
+Where do you think most ballplayers were born? I'll bet it has changed over time, starting high in New England, moving south and west, and then into Central America. See mapping info at https://ggplot2-book.org/maps.html?msclkid=a46c9d7bcf7811ecb65c5b4f51f9285e
+
+```{r}
 # Switch-hitters are more likely to join the Hall. Next best is batting left.
 bio %>%
   tabyl(bats, hof) %>%
@@ -232,6 +355,15 @@ bio %>%
   kableExtra::kbl()
 ```
 
+### Hall of Famers
+
 ## KM
 
 km_fit <- survfit(Surv(life_yrs))
+
+
+## Reference
+
+* [Baseball Data Science](https://www.baseballdatascience.com/survival-analysis-how-long-do-careers-last/)
+
+* [NIH](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2394262/)
