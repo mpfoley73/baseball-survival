@@ -31,6 +31,7 @@ In addition to the usual packages, include **survival** for modeling, **survmine
 ```{r warning=FALSE, message=FALSE}
 library(tidyverse)
 library(janitor)
+library(glue)
 library(scales)
 library(lubridate)
 library(extrafont)
@@ -333,23 +334,36 @@ p4b <- bio %>%
 p4b
 ```
 
-### Birthplace
+### Birthplace {.tabset}
 
-Where do you think most ballplayers were born? I'll bet it has changed over time, starting high in New England, moving south and west, and then into Central America. See mapping info at https://ggplot2-book.org/maps.html?msclkid=a46c9d7bcf7811ecb65c5b4f51f9285e
+Today, 28% of MLB players were born outside the US. The Domincan Republic and Venezuela are the largest sources of international talent.
 
-```{r}
+#### International
+
+```{r message=FALSE, warning=FALSE}
+# Help from https://r-spatial.org/r/2018/10/25/ggplot2-sf.html.
+
 library(sf)
 library(rnaturalearth)
 library(rnaturalearthdata)
 library(ggspatial)
 
 world_dat <- ne_countries(scale = "medium", returnclass = "sf")
+state_dat <- ne_states(country = "United States of America", returnclass = "sf")
+
+# For country labels.
 world_centroid <- world_dat %>% 
   st_make_valid() %>% 
   st_centroid() %>% 
-  st_coordinates() %>%
-  cbind(world_dat)
+  st_coordinates()
 
+state_centroid <- state_dat %>% 
+  st_make_valid() %>% 
+  st_centroid() %>% 
+  st_coordinates()
+
+# Modify country names in bio to match those in world_dat. Then summarize data
+# for plot.
 bio_country <- bio %>% 
   mutate(
     birth_country = case_when(
@@ -374,37 +388,133 @@ bio_country <- bio %>%
       birth_country == "Dominican Republic" ~ "Dominican Rep.",
       TRUE ~ birth_country
     )
-  ) %>%
-  count(birth_country)
+  )
 
-bio_country %>% arrange(desc(n)) %>% head(10)
+bio_country_n <- bio_country %>% 
+  filter(career_status == 0) %>%
+  count(birth_country) %>%
+  mutate(pct = n / sum(n))
+
+bio_state <- bio
+
+bio_state_n <- bio_state %>%
+  filter(career_status == 0 & birth_country == "USA") %>%
+  count(birth_country, birth_state) %>%
+  mutate(pct = n / sum(n))
 
 world_dat %>%
-  left_join(bio_country, by = c("name" = "birth_country")) %>%
-  replace_na(list(n = 0)) %>%
-  mutate(n = if_else(name == "United States", 0, n)) %>%
+  cbind(world_centroid) %>%
+  left_join(bio_country_n, by = c("name" = "birth_country")) %>%
+  replace_na(list(n = 0, pct = 0)) %>%
+  mutate(
+    lbl = if_else(name %in% c("United States", "Mexico", "Dominican Rep.", "Cuba", "Venezuela"),
+                  glue("{abbrev}\n{percent(pct, 1)}"),
+                  glue(""))
+  ) %>%
   ggplot() +
-  geom_sf(aes(fill = n)) +
-  geom_text(data = world_centroid %>% 
-              filter(name %in% (c("Mexico", "Dominican Rep.", "Cuba", "Venezuela"))), 
-            aes(x = X, y = Y, label = name),
-    color = "darkblue", fontface = "bold", check_overlap = TRUE) +
-  annotation_scale(location = "bl", width_hint = 0.5) +
+  geom_sf(aes(fill = pct), show.legend = FALSE) +
+  geom_text(aes(x = X, y = Y, label = lbl),
+    color = "black", 
+    # fontface = "bold", 
+    check_overlap = FALSE,
+    # family = "TR Plaza",
+    size = 3.0
+  ) +
+  scale_fill_gradient(low = "gray99", high = "slategray") +
+  annotation_scale(location = "bl", width_hint = 0.25) +
   annotation_north_arrow(location = "bl", which_north = "true", 
-                         pad_x = unit(0.75, "in"), pad_y = unit(0.5, "in"),
+                         pad_x = unit(0.5, "in"), pad_y = unit(0.5, "in"),
                          style = north_arrow_fancy_orienteering) +
-  coord_sf(xlim = c(-112.15, -54.12), ylim = c(-7.65, 33.97), expand = TRUE) +
+  coord_sf(xlim = c(-130, -45), ylim = c(0, 50)) +
   theme_light() +
-  labs(title = "Where players come from.") 
+  mlb_theme +
+  labs(
+    title = "Fig 5a. Top International Sources of Talent.", 
+    subtitle = "Historical count of major leaguers.",
+    x = NULL, y = NULL, fill = NULL
+  ) 
+```
 
-length(unique(world_dat$NAME))
+#### Domestic
 
-usa <- st_as_sf(maps::map("state", fill=TRUE, plot =FALSE))
+```{r}
+census_pop <- readr::read_csv(
+  "https://www2.census.gov/programs-surveys/popest/datasets/2020-2021/state/totals/NST-EST2021-alldata.csv"
+)
 
-ggplot(usa) +
-  geom_sf(color = "#2b2b2b", fill = "white", size=0.125) +
-  coord_sf(crs = st_crs("+proj=laea +lat_0=45 +lon_0=-100 +x_0=0 +y_0=0 +a=6370997 +b=6370997 +units=m +no_defs"), datum = NA) +
-  ggthemes::theme_map()
+bio_state_n_2 <- bio_state %>%
+  filter(career_status == 0 & birth_country == "USA") %>%
+  count(birth_state) %>%
+  inner_join(census_pop, by = c("birth_state" = "NAME")) %>%
+  mutate(n_per_capita = n / POPESTIMATE2021)
+
+
+state_dat %>%
+  cbind(state_centroid) %>%
+  left_join(bio_state_n_2, by = c("name" = "birth_state")) %>%
+  replace_na(list(n_per_capita = 0)) %>%
+  mutate(lbl = comma(n_per_capita * 1E6, .1)) %>%
+  ggplot() +
+  geom_sf(aes(fill = n_per_capita), show.legend = FALSE) +
+  geom_text(aes(x = X, y = Y, label = lbl),
+    color = "black",
+    # fontface = "bold",
+    check_overlap = TRUE,
+    # family = "TR Plaza",
+    size = 3.0
+  ) +
+  scale_fill_gradient(low = "gray99", high = "slategray") +
+  annotation_scale(location = "bl", width_hint = 0.25) +
+  annotation_north_arrow(location = "bl", which_north = "true", 
+                         pad_x = unit(0.5, "in"), pad_y = unit(0.5, "in"),
+                         style = north_arrow_fancy_orienteering) +
+  coord_sf(xlim = c(-130, -60), ylim = c(20, 50)) +
+  theme_light() +
+  mlb_theme +
+  labs(
+    title = "Fig 5b. Top Domestic Sources of Talent.", 
+    subtitle = "Historical count of major leaguers.",
+    x = NULL, y = NULL, fill = NULL
+  ) 
+```
+
+### {}
+
+Major League baseball was not an international organization until after WWII (Fig 6). Interesting that the earliest ballplayers were often born in Europe.
+
+```{r}
+bio_country %>%
+  left_join(world_dat, by = c("birth_country" = "name")) %>%
+  mutate(debut_year = year(play_debut)) %>%
+  count(debut_year, region_wb) %>%
+  group_by(debut_year) %>%
+  mutate(pct = n / sum(n)) %>%
+  ungroup() %>%
+  filter(!is.na(region_wb)) %>%
+  mutate(
+    region_wb = fct_relevel(
+      region_wb, 
+      "North America", "Latin America & Caribbean", "East Asia & Pacific"
+    ),
+    region_wb = fct_collapse(
+      region_wb,
+      `North America` = "North America",
+      `Latin America & Caribbean` = "Latin America & Caribbean", 
+      `East Asia & Pacific` = "East Asia & Pacific",
+      `Europe & Central Asia` = "Europe & Central Asia",
+      other_level = "Other"
+    )
+  ) %>%
+  ggplot(aes(x = debut_year)) +
+  geom_line(aes(y = pct, color = region_wb)) +
+  labs(
+    title = "MLB became more international after WWII.",
+    subtitle = "Players debuting by year.",
+    x = NULL, y = NULL, color = NULL
+  ) +
+  scale_y_continuous(labels = percent_format(1)) +
+  theme_light() +
+  mlb_theme
 ```
 
 
