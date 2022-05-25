@@ -24,7 +24,7 @@ A major league baseball career can expect to last into the player's mid-thirties
 
 This document is the detailed work log. The final report is published here, and a summarized account is in the repository [ReadMe](../README.md) and blog.
 
-## Setup
+# Setup
 
 In addition to the usual packages, include **survival** for modeling, **survminer** for visualization, and **gtsummary** for summaries.
 
@@ -66,7 +66,7 @@ theme_update(
 )
 ```
 
-## Data Management
+# Data Management
 
 Retrosheet publishes biographical information of every person who has ever played Major League baseball ([codebook and file](https://www.retrosheet.org/biofile.htm)). I downloaded the file to the ../data dir.
 
@@ -128,7 +128,8 @@ bio_2 <- bio_1 %>%
                   labels = c("Left", "Right", "Both")),
     throws = factor(throws, levels = c("L", "R", "B"), 
                     labels = c("Left", "Right", "Both")),
-    hof = factor(hof, levels = c("NOT", "HOF"), labels = "HoF", "Not")
+    hof = factor(if_else(is.na(hof), "NOT", hof), levels = c("NOT", "HOF"), 
+                         labels = c("Out", "In"))
   )
 ```
 
@@ -216,11 +217,11 @@ bio <- bio_5
 skimr::skim(bio)
 ```
 
-## Exploration
+# Exploration
 
 This section is primarily univariate analyses to get a feel for the data and to establish expectations for the survival models.
 
-### Height and Weight {.tabset}
+## Height and Weight
 
 According to a study [published in the journal of eLife](https://elifesciences.org/articles/13410), height is positively associated with longevity, and with education, earnings, and social position. The average man born in 1896 grew to 5' 7" (67") and for 1996 it was 5' 10" (70"). The Retrosheet data indicates baseball players are 4-6" taller than the overall male population (Table 1, Figs. 1-2). The average height for players born in 1896 was 5' 11" (71") and for 1996 it was 6' 2" (74"). Players are getting heavier too. Today's ballplayer is over 35 pounds heavier than 100 years ago. That's not just due to the height increase; body-mass index (BMI) is up 2.5 points (Fig. 3).
 
@@ -236,7 +237,7 @@ bio %>%
   ) %>% modify_caption("Table 1. MLB pLayer size for select birth years.")
 ```
 
-#### Taller
+### Taller
 
 ```{r}
 dat <- bio %>%
@@ -270,7 +271,7 @@ p1 <- dat %>%
 p1 + ggtitle(paste("Fig 1.", title_text))
 ```
 
-#### Heavier
+### Heavier
 
 ```{r}
 dat <- bio %>%
@@ -304,7 +305,7 @@ p2 <- dat %>%
 p2 + ggtitle(paste("Fig 2.", title_text))
 ```
 
-#### and More Massive
+### and More Massive
 
 Height and weight can be combined into a single measure of mass, the BMI.
 
@@ -344,8 +345,6 @@ p3 <- dat %>%
 p3 + ggtitle(paste("Fig 3.", title_text)) 
 ```
 
-### {-}
-
 Does the Retrosheet data confirm the eLife study? No. Correcting for birth year (a secular trend of improving health), each inch of height is associated with 2 *less* months (.17 yrs) of life.
 
 ```{r}
@@ -356,61 +355,39 @@ bio %>%
   gtsummary::tbl_regression()
 ```
 
-### Handedness {.tabset}
+## Handedness
 
 According to [this Psychology Today blog](https://www.psychologytoday.com/us/blog/the-asymmetric-brain/201908/8-new-scientific-findings-about-left-handedness), about 9% of people are left-handed. However among Major League baseball players the prevalence is much higher. Fig. 4a shows handedness by birth year. The plot is a little messy because less data is available for early years, and in the very latest years the proportions are noisy due to low sample size (not very many players today were born after 2000).
 
-Batting left-handed may be due to strategy rather than handedness. Throwing is almost certainly an indicator of handedness. Evidence of this is in the number of ambidextrous pitchers - there are almost none. The Psychology Today blog suggests cultural norms play a role in handedness. Fig 4b shows an increasing trend in the proportion of left-handed pitchers up until 1950.
-
-```{r}
-plot_p4 <- function(dat) {
-  bio %>%
-    filter(!is.na(birthdate)) %>%
-    mutate(birth_year = year(birthdate)) %>%
-    pivot_longer(cols = c(bats, throws)) %>%
-    group_by(birth_year, name, value) %>%
-    summarize(.groups = "drop_last", n = n()) %>%
-    mutate(pct = n / sum(n)) %>%
-    ungroup() %>%
-    ggplot(aes(x = birth_year, y = pct, color = value)) +
-    geom_line() +
-    scale_y_continuous(labels = percent_format(1)) +
-    facet_wrap(facets = vars(name)) +
-    labs(
-      x = "Birth Year", y = NULL, color = NULL,
-      subtitle = "Prevalence by birth-year."
-    )
-}
-```
-
-#### Raw
+Batting left-handed may be due to strategy rather than handedness. Throwing is almost certainly an indicator of handedness. Evidence of this is in the number of ambidextrous pitchers - there are almost none. The Psychology Today blog suggests cultural norms play a role in handedness. Fig 4 shows an increasing trend in the proportion of left-handed pitchers up until 1950.
 
 ```{r}
 title_text <- "Left-handedness increased until 1950."
-p4a <- bio %>% plot_p4()
-p4a +
-  scale_color_manual(values = c("Left" = "#F4793E", 
-                                "Right" = "#231F20", 
-                                "Both" = "#C49D6E", 
-                                "N/A" = "#E8D8C4")) +
-  ggtitle(paste("Fig 4a.", title_text, "(raw)"))
+p4 <- bio %>% 
+  # About 5% of rows are missing a value for either `bats` or `throws`.
+  filter(!is.na(bats) & !is.na(throws)) %>%
+  filter(!is.na(birthdate)) %>%
+  mutate(birth_year = year(birthdate)) %>%
+  pivot_longer(cols = c(bats, throws)) %>%
+  group_by(birth_year, name, value) %>%
+  summarize(.groups = "drop_last", n = n()) %>%
+  mutate(pct = n / sum(n)) %>%
+  ungroup() %>%
+  ggplot(aes(x = birth_year, y = pct, color = value)) +
+  geom_line() +
+  scale_y_continuous(labels = percent_format(1)) +
+  scale_color_manual(values = as.character(mlb_palette[c(6, 5, 3)])) +
+  facet_wrap(facets = vars(name)) +
+  labs(
+    x = "Birth Year", y = NULL, color = NULL,
+    title = "Left-handedness increased until 1950.",
+    subtitle = "Prevalence by birth-year."
+  )
+p4 + 
+  ggtitle(paste("Fig. 4", title_text))
 ```
 
-#### Cleaned
-
-```{r}
-title_text <- "Left-handedness increased until 1950."
-p4b <- bio %>% 
-  filter(!is.na(bats) & !is.na(throws)) %>% 
-  plot_p4()
-p4b +
-  scale_color_manual(values = c("Left" = "#F4793E", 
-                                "Right" = "#231F20", 
-                                "Both" = "#C49D6E")) +
-  ggtitle(paste("Fig 4a.", title_text, "(cleaned)"))
-```
-
-### Birthplace {.tabset}
+## Birthplace
 
 MLB has a relatively high concentration of ballplayers of Latin descent. Many were born outside the US. Of ballplayers born in the US, most are naturally from high population states. Adding population data to the data set will normalize the player counts for comparison. 
 
@@ -477,9 +454,9 @@ bio_state_n <- bio %>%
   mutate(n_per_capita = n / POPESTIMATE2021)
 ```
 
-#### International
+### International
 
-Today, 28% of MLB players were born outside the US. The Dominican Republic is the largest source of talent (`r bio_country_n %>% filter(birth_country == "Dominican Rep.") %>% pull(n)` players), and has a stunning per capita contribution of `r bio_country_n %>% filter(birth_country == "Dominican Rep.") %>% mutate(n_per_capita = n_per_capita * 1E6) %>% pull(n_per_capita) %>% comma(.1)` players per million of population. The tiny island of Curaçao, population 142,000, boasts `r bio_country_n %>% filter(birth_country == "Dominican Rep.") %>% pull(n)` players for a whopping per capita contribution of `r bio_country_n %>% filter(birth_country == "Curaçao") %>% mutate(n_per_capita = n_per_capita * 1E6) %>% pull(n_per_capita) %>% comma(.1)` players per million.
+28% of today's MLB players were born outside the US. The Dominican Republic is the largest source of talent (`r bio_country_n %>% filter(birth_country == "Dominican Rep.") %>% pull(n)` players), and has a stunning per capita contribution of `r bio_country_n %>% filter(birth_country == "Dominican Rep.") %>% mutate(n_per_capita = n_per_capita * 1E6) %>% pull(n_per_capita) %>% comma(.1)` players per million of population. The tiny island of Curaçao, population 142,000, boasts `r bio_country_n %>% filter(birth_country == "Curaçao") %>% pull(n)` players for a whopping per capita contribution of `r bio_country_n %>% filter(birth_country == "Curaçao") %>% mutate(n_per_capita = n_per_capita * 1E6) %>% pull(n_per_capita) %>% comma(.1)` players per million.
 
 ```{r message=FALSE, warning=FALSE}
 title_text <- "The Dominican Republic is a baseball powerhouse."
@@ -516,7 +493,7 @@ p5 <- world_dat %>%
 p5 + ggtitle(paste("Fig 5.", title_text))
 ```
 
-#### Domestic
+### Domestic
 
 California (`r bio_state_n %>% filter(birth_state == "California") %>% pull(n)`) and Florida (`r bio_state_n %>% filter(birth_state == "Florida") %>% pull(n)`) are not only the highest overall producers of talent, they are also the highest per-capita producers (along with Georgia).
 
@@ -549,12 +526,11 @@ p6 <- state_dat %>%
 p6 + ggtitle(paste("Fig 6.", title_text))
 ```
 
-### {}
-
-Major League baseball was not an international organization until after WWII (Fig 6). Interesting that the earliest ballplayers were often born in Europe.
+Major League baseball was not an international organization until after WWII (Fig 7). The earliest ballplayers were often born in Europe.
 
 ```{r}
-bio_country %>%
+title_text <- "MLB became more international after WWII."
+p7 <- bio_country %>%
   left_join(world_dat, by = c("birth_country" = "name")) %>%
   mutate(debut_year = year(play_debut)) %>%
   count(debut_year, region_wb) %>%
@@ -579,41 +555,108 @@ bio_country %>%
   ggplot(aes(x = debut_year)) +
   geom_line(aes(y = pct, color = region_wb)) +
   labs(
-    title = "MLB became more international after WWII.",
-    subtitle = "Players debuting by year.",
+    subtitle = "Source of players by year debuted.",
     x = NULL, y = NULL, color = NULL
   ) +
-  scale_y_continuous(labels = percent_format(1))
+  scale_y_continuous(labels = percent_format(1)) +
+  scale_color_manual(values = as.character(mlb_palette))
+p7 + ggtitle(paste("Fig. 7", title_text))
 ```
 
+## Hall of Famers
+
+Switch-hitters are more likely to join the Hall. Next best is batting left.
 
 ```{r}
-# Switch-hitters are more likely to join the Hall. Next best is batting left.
-bio %>%
-  tabyl(bats, hof) %>%
-  adorn_percentages(denominator = "row") %>%
-  adorn_pct_formatting() %>%
-  adorn_ns() %>%
-  kableExtra::kbl()
-
-# ...but it's better to throw right-handed
-bio %>%
-  tabyl(throws, hof) %>%
-  adorn_percentages(denominator = "row") %>%
-  adorn_pct_formatting() %>%
-  adorn_ns() %>%
-  kableExtra::kbl()
+bio %>% 
+  # Inactive
+  filter(career_status == 1) %>% 
+  tbl_cross(row = bats, col = hof, percent = "row") %>%
+  add_p()
 ```
 
-### Hall of Famers
+But its better to throw right.
 
-## KM
+```{r}
+bio %>% 
+  # Inactive
+  filter(career_status == 1) %>% 
+  tbl_cross(row = throws, col = hof, percent = "row") %>%
+  add_p()
+```
+
+Is fame related to longevity? Holy whammer - yes, by five years!
+
+```{r}
+bio %>%
+  # deceased
+  filter(life_status == 1) %>%
+  tbl_summary(by = hof, include = c(life_yrs)) %>%
+  add_p()
+```
+
+## Survival
+
+This section explores the relationship between survival (career length, lifetimes, age at career end) and the player attributes in the data set.
+
+### Hall of Fame
+
+```{r}
+(km_fit <- survfit(Surv(career_yrs, career_status) ~ hof, data = bio))
+```
+The median career length is `r summary(km_fit)$table[1, "median"] %>% comma(.1)` years for non-Hall of Famers, `r summary(km_fit)$table[2, "median"] %>% comma(.1)` years for those in the Hall. 
+
+```{r}
+km_fit %>%
+  ggsurvplot(
+    data = bio,
+    fun = "pct",
+    linetype = "strata", # Change line type by groups
+    conf.int = TRUE,
+    risk.table = TRUE,
+    fontsize = 3, # used in risk table
+    surv.median.line = "hv", # median horizontal and vertical ref lines
+    # ggtheme = theme_light(),
+    palette = as.character(mlb_palette[c(6, 5)]),
+    title = "Kaplan-Meier Survival Function Estimate",
+    subtitle = "Career Length by Hall of Fame Status"
+  )
+```
+
+```{r}
+(km_fit <- survfit(Surv(play_lastgame_life_yrs, career_status) ~ hof, data = bio))
+```
+The median retirement age is `r summary(km_fit)$table[1, "median"] %>% comma(.1)` years for non-Hall of Famers, `r summary(km_fit)$table[2, "median"] %>% comma(.1)` years for those in the Hall. 
+
+```{r}
+km_fit %>%
+  ggsurvplot(
+    data = bio,
+    fun = "pct",
+    linetype = "strata", # Change line type by groups
+    conf.int = TRUE,
+    risk.table = TRUE,
+    fontsize = 3, # used in risk table
+    surv.median.line = "hv", # median horizontal and vertical ref lines
+    # ggtheme = theme_light(),
+    palette = as.character(mlb_palette[c(6, 5)]),
+    title = "Kaplan-Meier Survival Function Estimate",
+    subtitle = "Career Length by Hall of Fame Status"
+  ) + ggtitle("blah")
+```
+
+
+# Analysis
 
 km_fit <- survfit(Surv(life_yrs))
 
 
-## Reference
+# Reference
 
 * [Baseball Data Science](https://www.baseballdatascience.com/survival-analysis-how-long-do-careers-last/)
 
 * [NIH](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2394262/)
+
+* [Dictionary of Old Time Baseball Slang](https://playmakerjournal.net/blogs/news/dictionary-of-old-time-baseball-slang), Playmaker Journal.
+
+* My Supservised ML Notes on [Survival Analysis](https://bookdown.org/mpfoley1973/supervised-ml/survival-analysis.html).
