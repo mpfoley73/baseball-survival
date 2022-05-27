@@ -34,3 +34,4 @@ Redelmeier DA, Singh SM (2022) Long-term mortality of academy award winning acto
 
 [Baseball with R](https://baseballwithr.wordpress.com/) blog.
 
+[Survival Analysis](https://bookdown.org/mpfoley1973/supervised-ml/survival-analysis.html). My supervised machine learning notes on surival analysis.
