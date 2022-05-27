@@ -2,3 +2,6 @@
 .Rhistory
 .RData
 .Ruserdata
+*.zip
+*.csv
+baseballdatabank-2022.2*

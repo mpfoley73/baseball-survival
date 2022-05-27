@@ -217,6 +217,11 @@ bio <- bio_5
 skimr::skim(bio)
 ```
 
+```{r}
+rm(bio_0, bio_1, bio_2, bio_3, bio_4, bio_5)
+```
+
+
 # Exploration
 
 This section is primarily univariate analyses to get a feel for the data and to establish expectations for the survival models.
@@ -250,8 +255,6 @@ mdl_preds <- dat %>% lm(height_in ~ yr, data = .) %>%
   predict(newdata = list(yr = label_yrs))
 label_dat <- data.frame(yr = label_yrs, height_in = mdl_preds)
 
-title_text <- "MLB Players Are Getting Taller."
-
 p1 <- dat %>%
   ggplot(aes(x = yr, y = height_in)) +
   geom_point(alpha = .2, color = mlb_palette["giant_brown"]) +
@@ -263,12 +266,12 @@ p1 <- dat %>%
     fill = mlb_palette["giant_beige"]
   ) +
   labs(
-    title = title_text,
+    title = "MLB Players Are Getting Taller.",
     subtitle = "Height by year of birth.",
     caption = "Fitted line and labels are straight-line fit, y ~ x.",
     y = "height (inches)", x = NULL
   )
-p1 + ggtitle(paste("Fig 1.", title_text))
+p1 + ggtitle(paste("Fig. 1", p1$labels$title))
 ```
 
 ### Heavier
@@ -284,8 +287,6 @@ mdl_preds <- dat %>% lm(weight ~ yr, data = .) %>%
   predict(newdata = list(yr = label_yrs))
 label_dat <- data.frame(yr = label_yrs, weight = mdl_preds)
 
-title_text <- "MLB Players Are Getting Heavier."
-
 p2 <- dat %>%
   ggplot(aes(x = yr, y = weight)) +
   geom_point(alpha = .2, color = mlb_palette["giant_brown"]) +
@@ -297,12 +298,12 @@ p2 <- dat %>%
     fill = mlb_palette["giant_beige"]
   ) +
   labs(
-    title = title_text,
+    title = "MLB Players Are Getting Heavier.",
     subtitle = "Weight by year of birth.",
     caption = "Fitted line and labels are straight-line fit, y ~ x.",
     y = "weight (pounds)", x = NULL
   )
-p2 + ggtitle(paste("Fig 2.", title_text))
+p2 + ggtitle(paste("Fig. 2", p2$labels$title))
 ```
 
 ### and More Massive
@@ -324,8 +325,6 @@ mdl_preds <- dat %>% lm(bmi ~ yr, data = .) %>%
   predict(newdata = list(yr = label_yrs))
 label_dat <- data.frame(yr = label_yrs, bmi = mdl_preds)
 
-title_text <- "MLB Players Are Getting More Massive."
-
 p3 <- dat %>%
   ggplot(aes(x = yr, y = bmi)) +
   geom_point(alpha = .2, color = mlb_palette["giant_brown"]) +
@@ -337,12 +336,12 @@ p3 <- dat %>%
     fill = mlb_palette["giant_beige"]
   ) +
   labs(
-    title = title_text,
+    title = "MLB Players Are Getting More Massive.",
     subtitle = "Body Mass Index (BMI) by year of birth.",
     caption = "Fitted line and labels are straight-line fit, y ~ x.",
     y = "bmi", x = NULL
   )
-p3 + ggtitle(paste("Fig 3.", title_text)) 
+p3 + ggtitle(paste("Fig. 3", p3$labels$title))
 ```
 
 Does the Retrosheet data confirm the eLife study? No. Correcting for birth year (a secular trend of improving health), each inch of height is associated with 2 *less* months (.17 yrs) of life.
@@ -362,7 +361,6 @@ According to [this Psychology Today blog](https://www.psychologytoday.com/us/blo
 Batting left-handed may be due to strategy rather than handedness. Throwing is almost certainly an indicator of handedness. Evidence of this is in the number of ambidextrous pitchers - there are almost none. The Psychology Today blog suggests cultural norms play a role in handedness. Fig 4 shows an increasing trend in the proportion of left-handed pitchers up until 1950.
 
 ```{r}
-title_text <- "Left-handedness increased until 1950."
 p4 <- bio %>% 
   # About 5% of rows are missing a value for either `bats` or `throws`.
   filter(!is.na(bats) & !is.na(throws)) %>%
@@ -383,8 +381,7 @@ p4 <- bio %>%
     title = "Left-handedness increased until 1950.",
     subtitle = "Prevalence by birth-year."
   )
-p4 + 
-  ggtitle(paste("Fig. 4", title_text))
+p4 + ggtitle(paste("Fig. 4", p4$labels$title))
 ```
 
 ## Birthplace
@@ -459,7 +456,6 @@ bio_state_n <- bio %>%
 28% of today's MLB players were born outside the US. The Dominican Republic is the largest source of talent (`r bio_country_n %>% filter(birth_country == "Dominican Rep.") %>% pull(n)` players), and has a stunning per capita contribution of `r bio_country_n %>% filter(birth_country == "Dominican Rep.") %>% mutate(n_per_capita = n_per_capita * 1E6) %>% pull(n_per_capita) %>% comma(.1)` players per million of population. The tiny island of Curaçao, population 142,000, boasts `r bio_country_n %>% filter(birth_country == "Curaçao") %>% pull(n)` players for a whopping per capita contribution of `r bio_country_n %>% filter(birth_country == "Curaçao") %>% mutate(n_per_capita = n_per_capita * 1E6) %>% pull(n_per_capita) %>% comma(.1)` players per million.
 
 ```{r message=FALSE, warning=FALSE}
-title_text <- "The Dominican Republic is a baseball powerhouse."
 p5 <- world_dat %>%
   cbind(world_centroid) %>%
   left_join(bio_country_n, by = c("name" = "birth_country")) %>%
@@ -485,12 +481,12 @@ p5 <- world_dat %>%
                          style = north_arrow_fancy_orienteering) +
   coord_sf(xlim = c(-130, -45), ylim = c(0, 50)) +
   labs(
-    title = "Fig 5a. ", 
+    title = "The Dominican Republic is a baseball powerhouse.", 
     subtitle = "Count of Major Leaguers per Million of Population.",
     x = NULL, y = NULL, fill = NULL
   ) 
 
-p5 + ggtitle(paste("Fig 5.", title_text))
+p5 + ggtitle(paste("Fig. 5", p5$labels$title))
 ```
 
 ### Domestic
@@ -498,7 +494,6 @@ p5 + ggtitle(paste("Fig 5.", title_text))
 California (`r bio_state_n %>% filter(birth_state == "California") %>% pull(n)`) and Florida (`r bio_state_n %>% filter(birth_state == "Florida") %>% pull(n)`) are not only the highest overall producers of talent, they are also the highest per-capita producers (along with Georgia).
 
 ```{r warning=FALSE, message=FALSE}
-title_text <- "Top Domestic Sources of Talent."
 p6 <- state_dat %>%
   cbind(state_centroid) %>%
   left_join(bio_state_n, by = c("name" = "birth_state")) %>%
@@ -520,16 +515,16 @@ p6 <- state_dat %>%
                          style = north_arrow_fancy_orienteering) +
   coord_sf(xlim = c(-130, -60), ylim = c(20, 50)) +
   labs(
+    title = "Top Domestic Sources of Talent.",
     subtitle = "Count of Major Leaguers per Million of Population.",
     x = NULL, y = NULL, fill = NULL
   ) 
-p6 + ggtitle(paste("Fig 6.", title_text))
+p6 + ggtitle(paste("Fig. 6", p6$labels$title))
 ```
 
 Major League baseball was not an international organization until after WWII (Fig 7). The earliest ballplayers were often born in Europe.
 
 ```{r}
-title_text <- "MLB became more international after WWII."
 p7 <- bio_country %>%
   left_join(world_dat, by = c("birth_country" = "name")) %>%
   mutate(debut_year = year(play_debut)) %>%
@@ -555,13 +550,20 @@ p7 <- bio_country %>%
   ggplot(aes(x = debut_year)) +
   geom_line(aes(y = pct, color = region_wb)) +
   labs(
+    title = "MLB became more international after WWII.",
     subtitle = "Source of players by year debuted.",
     x = NULL, y = NULL, color = NULL
   ) +
   scale_y_continuous(labels = percent_format(1)) +
   scale_color_manual(values = as.character(mlb_palette))
-p7 + ggtitle(paste("Fig. 7", title_text))
+
+p7 + ggtitle(paste("Fig. 7", p7$labels$title))
 ```
+
+```{r}
+rm()
+```
+
 
 ## Hall of Famers
 
@@ -599,50 +601,70 @@ bio %>%
 
 This section explores the relationship between survival (career length, lifetimes, age at career end) and the player attributes in the data set.
 
+```{r}
+plot_km <- function(mdl) {
+  mdl %>%
+    ggsurvplot(
+      data = bio,
+      fun = "pct",
+      linetype = "strata", # Change line type by groups
+      conf.int = TRUE,
+      risk.table = TRUE,
+      fontsize = 3, # used in risk table
+      surv.median.line = "hv", # median horizontal and vertical ref lines
+      # ggtheme = theme_light(),
+      palette = as.character(mlb_palette[c(6, 5)]),
+      subtitle = "Career Length by Hall of Fame Status",
+      censor = FALSE
+    )
+}
+```
+
 ### Hall of Fame
 
 ```{r}
-(km_fit <- survfit(Surv(career_yrs, career_status) ~ hof, data = bio))
+(km_hof_1 <- survfit(Surv(career_yrs, career_status) ~ hof, data = bio))
 ```
-The median career length is `r summary(km_fit)$table[1, "median"] %>% comma(.1)` years for non-Hall of Famers, `r summary(km_fit)$table[2, "median"] %>% comma(.1)` years for those in the Hall. 
+The median career length is `r summary(km_hof_1)$table[1, "median"] %>% comma(.1)` years for non-Hall of Famers, `r summary(km_hof_1)$table[2, "median"] %>% comma(.1)` years for those in the Hall. 
 
 ```{r}
-km_fit %>%
-  ggsurvplot(
-    data = bio,
-    fun = "pct",
-    linetype = "strata", # Change line type by groups
-    conf.int = TRUE,
-    risk.table = TRUE,
-    fontsize = 3, # used in risk table
-    surv.median.line = "hv", # median horizontal and vertical ref lines
-    # ggtheme = theme_light(),
-    palette = as.character(mlb_palette[c(6, 5)]),
-    title = "Kaplan-Meier Survival Function Estimate",
-    subtitle = "Career Length by Hall of Fame Status"
+p8a <- km_hof_1 %>% plot_km() 
+
+p8a$plot <- p8a$plot + 
+  labs(
+    title = "HoF Careers are longer.",
+    subtitle = "KM survival curve of career length by Hall of Fame status."
   )
+
+tmp <- p8a
+tmp$plot <- tmp$plot + labs(title = paste("Fig8a.", tmp$plot$labels$title))
+tmp
 ```
 
 ```{r}
-(km_fit <- survfit(Surv(play_lastgame_life_yrs, career_status) ~ hof, data = bio))
+(km_hof_2 <- survfit(Surv(play_lastgame_life_yrs, career_status) ~ hof, data = bio))
 ```
-The median retirement age is `r summary(km_fit)$table[1, "median"] %>% comma(.1)` years for non-Hall of Famers, `r summary(km_fit)$table[2, "median"] %>% comma(.1)` years for those in the Hall. 
+
+The median retirement age is `r summary(km_hof_2)$table[1, "median"] %>% comma(.1)` years for non-Hall of Famers, `r summary(km_hof_2)$table[2, "median"] %>% comma(.1)` years for those in the Hall. 
 
 ```{r}
-km_fit %>%
-  ggsurvplot(
-    data = bio,
-    fun = "pct",
-    linetype = "strata", # Change line type by groups
-    conf.int = TRUE,
-    risk.table = TRUE,
-    fontsize = 3, # used in risk table
-    surv.median.line = "hv", # median horizontal and vertical ref lines
-    # ggtheme = theme_light(),
-    palette = as.character(mlb_palette[c(6, 5)]),
-    title = "Kaplan-Meier Survival Function Estimate",
-    subtitle = "Career Length by Hall of Fame Status"
-  ) + ggtitle("blah")
+(km_hof_3 <- survfit(Surv(life_yrs, life_status) ~ hof, data = bio))
+```
+
+The median life expectancy is `r summary(km_hof_3)$table[1, "median"] %>% comma(.1)` years for non-Hall of Famers, `r summary(km_hof_3)$table[2, "median"] %>% comma(.1)` years for those in the Hall. 
+
+```{r}
+p8b <- km_hof_3 %>% plot_km() 
+
+p8b$plot <- p8b$plot + 
+  labs(
+    title = "HoF Players live longer.",
+    subtitle = "KM survival curve of life expectancy by Hall of Fame status."
+  )
+
+tmp <- p8b
+tmp$plot <- tmp$plot + labs(title = paste("Fig8b.", tmp$plot$labels$title))
+tmp
 ```
 
 
