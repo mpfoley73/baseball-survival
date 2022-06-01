@@ -4,4 +4,6 @@
 .Ruserdata
 *.zip
 *.csv
+*.mdb
+*.ldb
 baseballdatabank-2022.2*
