@@ -1,0 +1,101 @@
+---
+title: "Reproducing the Abel and Kruger Study"
+author: "Michael Foley"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Abel and Kruger (2005) use professional baseball player data to evaluate the role of awarded achievement within the sport on longevity. The authors hypothesize that players inducted into the Baseball Hall of Fame have longer longevities than players of the same age who are not inducted. This workbook attempts to reproduce the results from the same source data and methods.
+
+# Setup
+
+```{r warning=FALSE, message=FALSE}
+# library(Lahman)  # has latest data
+library(tidyverse)
+library(lubridate)
+```
+
+# Data
+
+The authors used the 2002 Lahman database, Version 5.0 (2002). I downloaded the Access database and exported the HallOfFame and the Master tables to csv. (There is also a zipped csv archive, but it lacks column headers.)
+
+```{r warning=FALSE, message=FALSE}
+Master <- read_csv("../data/lahman_50-2k/Master.csv")
+HallOfFame <- read_csv("../data/lahman_50-2k/HallOfFame.csv")
+```
+
+The data set is explained in the Results section of the article (page 961).
+
+> One hundred and forty-three (143) players in the Hall of Fame had been inducted into the Baseball Hall of Fame while still alive as of 2002. These were age-matched with 3,430 players. The mean age of the Hall of Famers at time of induction
+was 57.5 years (SD $\pm$ 12.4). A total of 1,695 of these players had died by the end of 2002.
+
+Define `hall_of_famers`.
+
+```{r}
+hall_of_famers <- HallOfFame %>% 
+  inner_join(Master, by = "hofID") %>%
+  filter(
+    inducted == "Y",
+    category == "Player",
+    yearid < 2002,
+    coalesce(deathYear, 9999) > yearid,
+    !is.na(playerID)
+  ) %>% 
+  mutate(age_at_induction = yearid - birthYear) %>%
+  select(playerID, inductionYear = yearid, birthYear, age_at_induction)
+```
+
+I almost, but not quite, get the same data set for the Hall of Famers.
+
+```{r collapse=TRUE}
+# Matches 143 in article.
+nrow(hall_of_famers)
+
+# Matches 57.5 in article.
+mean(hall_of_famers$age_at_induction)
+
+# Doesn't quite match 12.4 in article.
+sd(hall_of_famers$age_at_induction)
+```
+
+The age-matched cohort (page 960) is 
+
+> ...players who were alive at the time of induction when induction occurred for their case-matched cohort. Only players were included in our analysis (executives, announcers, umpires were not included; managers were included who had also been players).
+
+The following code chunk identifies every player who shares the same age as a Hall of Famer _and_ was alive at that Hall of Famer's induction year. Note that a player may have been alive for one Hall of Famer's induction, but not for a later induction of another Hall of Famer. 
+
+```{r collapse=TRUE}
+age_matched_cohort <- hall_of_famers %>%
+  # Get a unique set of ages for each induction class.
+  select(inductionYear, birthYear) %>%
+  unique() %>%
+  # Age-matches. Note: this creates duplicates because many Hall of Famers share
+  # the same birth year.
+  inner_join(Master, by = "birthYear") %>%
+  filter(
+    # Just the players
+    !is.na(playerID),
+    # Alive at the time of the Hall of Famer's induction.
+    coalesce(deathYear, 9999) > inductionYear
+  ) %>%
+  # Exclude the Hall of Famer (so we're not double-counting).
+  anti_join(hall_of_famers, by = "playerID") %>%
+  select(-inductionYear) %>%
+  unique()
+```
+
+I'm not even close with the age-matched cohort. `age_matched_cohort` should be 3,430 players. Instead, it's `r scales::comma(nrow(age_matched_cohort))`. What went wrong?
+
+```{r}
+nrow(age_matched_cohort)
+```
+
+# References
+
+Ernest L. Abel & Michael L. Kruger (2005) The Longevity of Baseball Hall of Famers Compared to Other Players, Death Studies, 29:10, 959-963, DOI: [10.1080/07481180500299493](https://doi.org/10.1080/07481180500299493). [PDF](http://www.med.mcgill.ca/epidemiology/hanley/bios601/CandHchapter06/baseball_players.pdf).
+
+[Sean Lahman's Baseball Database](https://www.seanlahman.com/baseball-archive/statistics/).
