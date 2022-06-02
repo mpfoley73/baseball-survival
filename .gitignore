@@ -7,3 +7,4 @@
 *.mdb
 *.ldb
 baseballdatabank-2022.2*
+data/lahman_50-2k/lahman50.mdb
