@@ -417,33 +417,21 @@ div.tocify {
 <div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>matches <span class="sc">%&gt;%</span> <span class="fu">select</span>(playerID.cohort) <span class="sc">%&gt;%</span> <span class="fu">unique</span>() <span class="sc">%&gt;%</span> <span class="fu">nrow</span>()</span>
 <span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="do">## [1] 20</span></span></code></pre></div>
 <p>Let’s look at some of the matches. Ethan Allen was still alive when Red Ruffing was inducted in 1967. Both were born in 1904. Art Bues was alive when Tris Speaker was inducted in 1937, and both were born in 1888. Douglas Whammy shared the same birth year as three Hall of Famers inducted while still alive. Douglas Whammy was still alive as of 2002.</p>
-<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>Master <span class="sc">%&gt;%</span> <span class="fu">filter</span>(playerID <span class="sc">==</span> <span class="st">&quot;ruffire01&quot;</span>)</span></code></pre></div>
-<pre><code>## # A tibble: 1 x 32
-##   lahmanID playerID  managerID hofID      birthYear birthMonth birthDay birthCountry
-##      &lt;dbl&gt; &lt;chr&gt;     &lt;chr&gt;     &lt;chr&gt;          &lt;dbl&gt;      &lt;dbl&gt;    &lt;dbl&gt; &lt;chr&gt;       
-## 1    12319 ruffire01 &lt;NA&gt;      ruffire01h      1904          5        3 USA         
-## # ... with 24 more variables: birthState &lt;chr&gt;, birthCity &lt;chr&gt;,
-## #   deathYear &lt;dbl&gt;, deathMonth &lt;dbl&gt;, deathDay &lt;dbl&gt;, deathCountry &lt;chr&gt;,
-## #   deathState &lt;chr&gt;, deathCity &lt;chr&gt;, nameFirst &lt;chr&gt;, nameLast &lt;chr&gt;,
-## #   nameNote &lt;chr&gt;, nameGiven &lt;chr&gt;, nameNick &lt;chr&gt;, weight &lt;dbl&gt;,
-## #   height &lt;dbl&gt;, bats &lt;chr&gt;, throws &lt;chr&gt;, debut &lt;chr&gt;, college &lt;chr&gt;,
-## #   lahman40ID &lt;chr&gt;, lahman45ID &lt;chr&gt;, retroID &lt;chr&gt;, holtzID &lt;chr&gt;,
-## #   bbrefID &lt;chr&gt;</code></pre>
-<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>matches <span class="sc">%&gt;%</span> <span class="fu">arrange</span>(playerID.cohort)</span></code></pre></div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>matches <span class="sc">%&gt;%</span> <span class="fu">rename</span>(<span class="at">inducted =</span> inductionYear) <span class="sc">%&gt;%</span> <span class="fu">arrange</span>(playerID.cohort)</span></code></pre></div>
 <pre><code>## # A tibble: 37 x 7
-##    playerID.cohort nameFirst nameLast  birthYear deathYear playerID.hof
-##    &lt;chr&gt;           &lt;chr&gt;     &lt;chr&gt;         &lt;dbl&gt;     &lt;dbl&gt; &lt;chr&gt;       
-##  1 allenet01       Ethan     Allen          1904      1993 ruffire01   
-##  2 buesar01        Art       Bues           1888      1954 speaktr01   
-##  3 coxla01         Larry     Cox            1947      1990 benchjo01   
-##  4 doughto01       Tom       Dougherty      1881      1953 eversjo01   
-##  5 doughto01       Tom       Dougherty      1881      1953 walshed01   
-##  6 douglwh01       Whammy    Douglas        1935        NA gibsobo01   
-##  7 douglwh01       Whammy    Douglas        1935        NA koufasa01   
-##  8 douglwh01       Whammy    Douglas        1935        NA robinfr02   
-##  9 fanweha01       Harry     Fanwell        1886      1965 bakerfr01   
-## 10 fanweha01       Harry     Fanwell        1886      1965 cobbty01    
-## # ... with 27 more rows, and 1 more variable: inductionYear &lt;dbl&gt;</code></pre>
+##    playerID.cohort nameFirst nameLast  birthYear deathYear playerID.hof inducted
+##    &lt;chr&gt;           &lt;chr&gt;     &lt;chr&gt;         &lt;dbl&gt;     &lt;dbl&gt; &lt;chr&gt;           &lt;dbl&gt;
+##  1 allenet01       Ethan     Allen          1904      1993 ruffire01        1967
+##  2 buesar01        Art       Bues           1888      1954 speaktr01        1937
+##  3 coxla01         Larry     Cox            1947      1990 benchjo01        1989
+##  4 doughto01       Tom       Dougherty      1881      1953 eversjo01        1946
+##  5 doughto01       Tom       Dougherty      1881      1953 walshed01        1946
+##  6 douglwh01       Whammy    Douglas        1935        NA gibsobo01        1981
+##  7 douglwh01       Whammy    Douglas        1935        NA koufasa01        1972
+##  8 douglwh01       Whammy    Douglas        1935        NA robinfr02        1982
+##  9 fanweha01       Harry     Fanwell        1886      1965 bakerfr01        1955
+## 10 fanweha01       Harry     Fanwell        1886      1965 cobbty01         1936
+## # ... with 27 more rows</code></pre>
 <p>Why is my data set so much longer than Abel and Kruger’s - what am I missing here?</p>
 </div>
 </div>

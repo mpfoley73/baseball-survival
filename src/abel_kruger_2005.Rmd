@@ -133,12 +133,9 @@ matches %>% select(playerID.cohort) %>% unique() %>% nrow()
 ```
 
 Let's look at some of the matches. Ethan Allen was still alive when Red Ruffing was inducted in 1967. Both were born in 1904. Art Bues was alive when Tris Speaker was inducted in 1937, and both were born in 1888. Douglas Whammy shared the same birth year as three Hall of Famers inducted while still alive. Douglas Whammy was still alive as of 2002.
-```{r}
-Master %>% filter(playerID == "ruffire01")
-```
 
 ```{r}
-matches %>% arrange(playerID.cohort)
+matches %>% rename(inducted = inductionYear) %>% arrange(playerID.cohort)
 ```
 
 Why is my data set so much longer than Abel and Kruger's - what am I missing here?
