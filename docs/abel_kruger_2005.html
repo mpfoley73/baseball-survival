@@ -11,7 +11,7 @@
 
 <meta name="author" content="Michael Foley" />
 
-<meta name="date" content="2022-06-02" />
+<meta name="date" content="2022-06-03" />
 
 <title>Reproducing the Abel and Kruger Study</title>
 
@@ -343,161 +343,110 @@ div.tocify {
 
 <h1 class="title toc-ignore">Reproducing the Abel and Kruger Study</h1>
 <h4 class="author">Michael Foley</h4>
-<h4 class="date">2022-06-02</h4>
+<h4 class="date">2022-06-03</h4>
 
 </div>
 
 
-<p>Abel and Kruger (2005) use professional baseball player data to evaluate the role of awarded achievement within the sport on longevity. The authors hypothesize that players inducted into the Baseball Hall of Fame have longer longevities than players of the same age who are not inducted. This workbook reproduces the results from the same source data and methods.</p>
+<p>Abel and Kruger (<a href="#Abel2005">2005</a>) use professional baseball player data to evaluate the role of awarded achievement within the sport on longevity. The authors hypothesize that players inducted into the Baseball Hall of Fame have longer longevities than players of the same age who are not inducted. This workbook reproduces the results from the same source data and methods.</p>
 <div id="data" class="section level1">
 <h1>Data</h1>
-<p>The authors used the 2002 Lahman database, Version 5.0 (2002). I downloaded the Access database and exported the <strong>HallOfFame</strong> and <strong>Master</strong> tables to csv. (There is also a zipped csv archive, but it lacks column headers.)</p>
+<p>The authors used the 2002 Lahman database, Version 5.0 (<a href="#Lahman2002">2002</a>). I downloaded the Access database and exported the <strong>HallOfFame</strong> and <strong>Master</strong> tables to csv.<a href="#fn1" class="footnote-ref" id="fnref1"><sup>1</sup></a></p>
 <div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>Master <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(<span class="st">&quot;../data/lahman_50-2k/Master.csv&quot;</span>)</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>HallOfFame <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(<span class="st">&quot;../data/lahman_50-2k/HallOfFame.csv&quot;</span>)</span></code></pre></div>
-<p>The <code>playerID</code> column in <code>Master</code> identifies people who played games (as opposed to managing or broadcasting, etc.). Of the 15,965 rows in the data set, 15,817 are players. Just to confirm this assumption, I’ll get the playerIDs from the <strong>Batting</strong>, <strong>Fielding</strong>, and <strong>Pitching</strong> tables. Are these confirmed players the same as those in <strong>Master</strong>?</p>
-<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>Batting <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(<span class="st">&quot;../data/lahman_50-2k/Batting.csv&quot;</span>)</span></code></pre></div>
-<pre><code>## Rows: 83284 Columns: 22</code></pre>
-<pre><code>## -- Column specification --------------------------------------------------------
-## Delimiter: &quot;,&quot;
-## chr  (3): playerID, teamID, lgID
-## dbl (19): yearID, stint, G, AB, R, H, 2B, 3B, HR, RBI, SB, CS, BB, SO, IBB, ...</code></pre>
-<pre><code>## 
-## i Use `spec()` to retrieve the full column specification for this data.
-## i Specify the column types or set `show_col_types = FALSE` to quiet this message.</code></pre>
-<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>Fielding <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(<span class="st">&quot;../data/lahman_50-2k/Fielding.csv&quot;</span>)</span></code></pre></div>
-<pre><code>## Rows: 119417 Columns: 14</code></pre>
-<pre><code>## -- Column specification --------------------------------------------------------
-## Delimiter: &quot;,&quot;
-## chr  (4): playerID, teamID, lgID, POS
-## dbl (10): yearID, stint, G, GS, InnOuts, PO, A, E, DP, ZR</code></pre>
-<pre><code>## 
-## i Use `spec()` to retrieve the full column specification for this data.
-## i Specify the column types or set `show_col_types = FALSE` to quiet this message.</code></pre>
-<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>Pitching <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(<span class="st">&quot;../data/lahman_50-2k/Pitching.csv&quot;</span>)</span></code></pre></div>
-<pre><code>## Rows: 34888 Columns: 20</code></pre>
-<pre><code>## -- Column specification --------------------------------------------------------
-## Delimiter: &quot;,&quot;
-## chr  (3): playerID, teamID, lgID
-## dbl (17): yearID, stint, W, L, G, GS, CG, SHO, SV, IPouts, H, ER, HR, BB, SO...</code></pre>
-<pre><code>## 
-## i Use `spec()` to retrieve the full column specification for this data.
-## i Specify the column types or set `show_col_types = FALSE` to quiet this message.</code></pre>
-<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>player_ids <span class="ot">&lt;-</span> <span class="fu">c</span>(Batting<span class="sc">$</span>playerID, Fielding<span class="sc">$</span>playerID, Pitching<span class="sc">$</span>playerID) <span class="sc">%&gt;%</span> <span class="fu">unique</span>()</span>
-<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Yes, playerID indicates an actual player.</span></span>
-<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>Master <span class="sc">%&gt;%</span> <span class="fu">filter</span>(<span class="sc">!</span><span class="fu">is.na</span>(playerID)) <span class="sc">%&gt;%</span> <span class="fu">nrow</span>()</span></code></pre></div>
-<pre><code>## [1] 15816</code></pre>
-<div class="sourceCode" id="cb16"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>Master <span class="sc">%&gt;%</span> <span class="fu">filter</span>(playerID <span class="sc">%in%</span> player_ids) <span class="sc">%&gt;%</span> <span class="fu">nrow</span>()</span></code></pre></div>
-<pre><code>## [1] 15816</code></pre>
-<div class="sourceCode" id="cb18"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>Master <span class="sc">%&gt;%</span> <span class="fu">filter</span>(<span class="sc">!</span>playerID <span class="sc">%in%</span> player_ids <span class="sc">&amp;</span> <span class="sc">!</span><span class="fu">is.na</span>(playerID)) <span class="sc">%&gt;%</span> <span class="fu">nrow</span>()</span></code></pre></div>
-<pre><code>## [1] 0</code></pre>
-<p>The <em>Results</em> section of the article explains the data set (page 961).</p>
+<p><code>Master</code> includes non-players (executives, announcers, and umpires) who were inducted into the Hall of Fame. Actual players are identified by a non-empty <code>playerID</code> column. Of the 15,965 rows in the data set, 15,817 are players.<a href="#fn2" class="footnote-ref" id="fnref2"><sup>2</sup></a></p>
+<p>The <em>Results</em> section of the article summarizes the row counts of the analysis data set derived from these tables (page 961).</p>
 <blockquote>
 <p>One hundred and forty-three (143) players in the Hall of Fame had been inducted into the Baseball Hall of Fame while still alive as of 2002. These were age-matched with 3,430 players. The mean age of the Hall of Famers at time of induction was 57.5 years (SD <span class="math inline">\(\pm\)</span> 12.4). A total of 1,695 of these players had died by the end of 2002.</p>
 </blockquote>
-<p>Capture the 143 Hall of Famers in object <code>hall_of_famers</code>.</p>
-<div class="sourceCode" id="cb20"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>hall_of_famers <span class="ot">&lt;-</span> HallOfFame <span class="sc">%&gt;%</span> </span>
-<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">inner_join</span>(Master, <span class="at">by =</span> <span class="st">&quot;hofID&quot;</span>) <span class="sc">%&gt;%</span></span>
-<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(</span>
-<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>    inducted <span class="sc">==</span> <span class="st">&quot;Y&quot;</span>,</span>
-<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>    category <span class="sc">==</span> <span class="st">&quot;Player&quot;</span>,</span>
-<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>    yearid <span class="sc">&lt;</span> <span class="dv">2002</span>,</span>
-<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a>    <span class="fu">coalesce</span>(deathYear, <span class="dv">9999</span>) <span class="sc">&gt;</span> yearid,</span>
-<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a>    <span class="sc">!</span><span class="fu">is.na</span>(playerID)</span>
-<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">%&gt;%</span> </span>
-<span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">age_at_induction =</span> yearid <span class="sc">-</span> birthYear) <span class="sc">%&gt;%</span></span>
-<span id="cb20-11"><a href="#cb20-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(playerID, <span class="at">inductionYear =</span> yearid, birthYear, age_at_induction)</span></code></pre></div>
-<p>Does this match the article? Almost, but not quite. I get the 143 rows, but the mean <span class="math inline">\(\pm\)</span> SD age at induction is a little off.</p>
-<div class="sourceCode" id="cb21"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Matches 143 in article.</span></span>
-<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a><span class="fu">nrow</span>(hall_of_famers)</span>
-<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a><span class="do">## [1] 143</span></span>
-<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Doesn&#39;t quite match 57.5 in article.</span></span>
-<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a><span class="fu">mean</span>(hall_of_famers<span class="sc">$</span>age_at_induction)</span>
-<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a><span class="do">## [1] 57.44056</span></span>
-<span id="cb21-8"><a href="#cb21-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb21-9"><a href="#cb21-9" aria-hidden="true" tabindex="-1"></a><span class="co"># Doesn&#39;t quite match 12.4 in article.</span></span>
-<span id="cb21-10"><a href="#cb21-10" aria-hidden="true" tabindex="-1"></a><span class="fu">sd</span>(hall_of_famers<span class="sc">$</span>age_at_induction)</span>
-<span id="cb21-11"><a href="#cb21-11" aria-hidden="true" tabindex="-1"></a><span class="do">## [1] 12.47173</span></span></code></pre></div>
+<p>The code chunk below identifies the 143 Hall of Famers as object <code>hall_of_famers</code>. The criteria is in the filter: 1) inducted into the Hall, 2) as a player, 3) through 2002, and 4) while alive.</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>hall_of_famers <span class="ot">&lt;-</span> HallOfFame <span class="sc">%&gt;%</span> </span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">inner_join</span>(Master, <span class="at">by =</span> <span class="st">&quot;hofID&quot;</span>) <span class="sc">%&gt;%</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    inducted <span class="sc">==</span> <span class="st">&quot;Y&quot;</span>,</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Inducted as a player _and_ has a playerID identifier (need both!)</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    category <span class="sc">==</span> <span class="st">&quot;Player&quot;</span>, <span class="sc">!</span><span class="fu">is.na</span>(playerID),</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    yearid <span class="sc">&lt;</span> <span class="dv">2003</span>,</span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="fu">coalesce</span>(deathYear, <span class="dv">9999</span>) <span class="sc">&gt;</span> yearid</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">%&gt;%</span> </span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">age_at_induction =</span> yearid <span class="sc">-</span> birthYear) <span class="sc">%&gt;%</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(playerID, <span class="at">inductionYear =</span> yearid, birthYear, age_at_induction)</span></code></pre></div>
+<p>Does this match the article? Not quite. I get 144 rows<a href="#fn3" class="footnote-ref" id="fnref3"><sup>3</sup></a>, and the mean <span class="math inline">\(\pm\)</span> SD age at induction is slightly off.</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Does not match 143 in article.</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="fu">nrow</span>(hall_of_famers)</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="do">## [1] 144</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Does not match 57.5 in article.</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="fu">mean</span>(hall_of_famers<span class="sc">$</span>age_at_induction)</span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="do">## [1] 57.375</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a><span class="co"># Does not match 12.4 in article.</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a><span class="fu">sd</span>(hall_of_famers<span class="sc">$</span>age_at_induction)</span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a><span class="do">## [1] 12.45292</span></span></code></pre></div>
 <p>The <em>Methods and Materials</em> section of the article elaborates the age-matching criteria (page 960).</p>
 <blockquote>
 <p>[age-matched players] were alive at the time of induction when induction occurred for their case-matched cohort. Only players were included in our analysis (executives, announcers, umpires were not included; managers were included who had also been players).</p>
 </blockquote>
-<p>The following code chunk identifies every player who shares the same age as a Hall of Famer <em>and</em> was alive at that Hall of Famer’s induction year. Note that a player may have been alive for one Hall of Famer’s induction, but not for a later induction of another Hall of Famer.</p>
-<div class="sourceCode" id="cb22"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a>age_matched_cohort <span class="ot">&lt;-</span> Master <span class="sc">%&gt;%</span></span>
-<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(<span class="sc">!</span><span class="fu">is.na</span>(playerID)) <span class="sc">%&gt;%</span></span>
-<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">inner_join</span>(hall_of_famers, <span class="at">by =</span> <span class="st">&quot;birthYear&quot;</span>, <span class="at">suffix =</span> <span class="fu">c</span>(<span class="st">&quot;&quot;</span>, <span class="st">&quot;.hof&quot;</span>)) <span class="sc">%&gt;%</span></span>
-<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>((<span class="sc">!</span><span class="fu">is.na</span>(deathYear) <span class="sc">|</span> deathYear <span class="sc">&gt;</span> inductionYear),</span>
-<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a>         playerID <span class="sc">!=</span> playerID.hof) <span class="sc">%&gt;%</span></span>
-<span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(playerID, birthYear, deathYear, nameFirst, nameLast, hofID) <span class="sc">%&gt;%</span></span>
-<span id="cb22-7"><a href="#cb22-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">unique</span>()</span></code></pre></div>
-<p>Does this match the article? I’m not even close. <code>age_matched_cohort</code> should have 3,430 players. Instead, it has 4,953 players.</p>
-<div class="sourceCode" id="cb23"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a><span class="fu">nrow</span>(age_matched_cohort)</span></code></pre></div>
-<pre><code>## [1] 4953</code></pre>
+<p>The code chunk below identifies every player who shares the same age as a Hall of Famer <em>and</em> was alive at that Hall of Famer’s induction year. Note that a player may have been alive for one Hall of Famer’s induction, but not for the later induction of another Hall of Famer with the same birth year.</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>age_matched_cohort <span class="ot">&lt;-</span> Master <span class="sc">%&gt;%</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">inner_join</span>(hall_of_famers, <span class="at">by =</span> <span class="st">&quot;birthYear&quot;</span>, <span class="at">suffix =</span> <span class="fu">c</span>(<span class="st">&quot;&quot;</span>, <span class="st">&quot;.hof&quot;</span>)) <span class="sc">%&gt;%</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="sc">!</span><span class="fu">is.na</span>(playerID),</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    <span class="fu">coalesce</span>(deathYear, <span class="dv">9999</span>) <span class="sc">&gt;</span> inductionYear,</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    playerID <span class="sc">!=</span> playerID.hof</span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">%&gt;%</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(playerID, birthYear, deathYear, nameFirst, nameLast, hofID) <span class="sc">%&gt;%</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>  <span class="co"># A player can match multiple Hall of Famers</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">unique</span>()</span></code></pre></div>
+<p>Does this match the article? Not even close. <code>age_matched_cohort</code> should have 3,430 players. Instead, it has 6,645 players. I tried defining age-match as sharing both birth year and birth month, but that yielded a result set that was way too <em>small</em>.</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="fu">nrow</span>(age_matched_cohort)</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="do">## [1] 6645</span></span></code></pre></div>
 <div id="what-went-wrong" class="section level2">
 <h2>What went wrong?</h2>
 <p>What went wrong? Let’s audit 20 random players of <code>age_matched_cohort</code>. Since <code>age_matched_cohort</code> has so many more players than it should have, at least one of these players should be unjustified.</p>
-<div class="sourceCode" id="cb25"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">1234</span>)</span>
-<span id="cb25-2"><a href="#cb25-2" aria-hidden="true" tabindex="-1"></a>random_rownums <span class="ot">&lt;-</span> <span class="fu">runif</span>(<span class="dv">20</span>, <span class="dv">1</span>, <span class="fu">nrow</span>(age_matched_cohort)) <span class="sc">%&gt;%</span> <span class="fu">as.integer</span>()</span>
-<span id="cb25-3"><a href="#cb25-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb25-4"><a href="#cb25-4" aria-hidden="true" tabindex="-1"></a>age_matched_cohort[random_rownums, ] <span class="sc">%&gt;%</span></span>
-<span id="cb25-5"><a href="#cb25-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(playerID, nameFirst, nameLast, hofID, birthYear, deathYear)</span></code></pre></div>
-<pre><code>## # A tibble: 20 x 6
-##    playerID  nameFirst nameLast   hofID birthYear deathYear
-##    &lt;chr&gt;     &lt;chr&gt;     &lt;chr&gt;      &lt;chr&gt;     &lt;dbl&gt;     &lt;dbl&gt;
-##  1 burreha01 Harry     Burrell    &lt;NA&gt;       1869      1914
-##  2 milnejo01 John      Milner     &lt;NA&gt;       1949      2000
-##  3 methasc01 Scat      Metha      &lt;NA&gt;       1913      1975
-##  4 mitchmo01 Monroe    Mitchell   &lt;NA&gt;       1901      1976
-##  5 stephdu01 Dummy     Stephenson &lt;NA&gt;       1869      1924
-##  6 mosolji01 Jim       Mosolf     &lt;NA&gt;       1905      1979
-##  7 allenjo01 John      Allen      &lt;NA&gt;       1890      1967
-##  8 dormare01 Red       Dorman     &lt;NA&gt;       1905      1974
-##  9 nitchot01 Otho      Nitcholas  &lt;NA&gt;       1908      1986
-## 10 leclage01 George    LeClair    &lt;NA&gt;       1886      1918
-## 11 parrisa01 Sam       Parrilla   &lt;NA&gt;       1943      1994
-## 12 macphwa01 Waddy     Macphee    &lt;NA&gt;       1899      1980
-## 13 fitzgma01 Matty     Fitzgerald &lt;NA&gt;       1880      1949
-## 14 vicksa01  Sammy     Vick       &lt;NA&gt;       1895      1986
-## 15 foxho01   Howie     Fox        &lt;NA&gt;       1921      1955
-## 16 smithja03 Jack      Smith      &lt;NA&gt;       1895      1972
-## 17 flateja01 Jack      Flater     &lt;NA&gt;       1880      1970
-## 18 ezzelho01 Homer     Ezzell     &lt;NA&gt;       1896      1976
-## 19 crawfgl01 Glenn     Crawford   &lt;NA&gt;       1913      1972
-## 20 doranto01 Tom       Doran      &lt;NA&gt;       1880      1910</code></pre>
-<p>Are these players correctly age-matched correctly? They are age-matched if 1) there was a Hall of Famer inducted while alive who shares the same birth year, and 2) they were alive during the induction year too.</p>
-<div class="sourceCode" id="cb27"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a>matches <span class="ot">&lt;-</span> age_matched_cohort[random_rownums, ] <span class="sc">%&gt;%</span></span>
-<span id="cb27-2"><a href="#cb27-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">inner_join</span>(hall_of_famers, <span class="at">by =</span> <span class="st">&quot;birthYear&quot;</span>, <span class="at">suffix =</span> <span class="fu">c</span>(<span class="st">&quot;.cohort&quot;</span>, <span class="st">&quot;.hof&quot;</span>)) <span class="sc">%&gt;%</span></span>
-<span id="cb27-3"><a href="#cb27-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>((<span class="sc">!</span><span class="fu">is.na</span>(deathYear) <span class="sc">|</span> deathYear <span class="sc">&gt;</span> inductionYear),</span>
-<span id="cb27-4"><a href="#cb27-4" aria-hidden="true" tabindex="-1"></a>         playerID.cohort <span class="sc">!=</span> playerID.hof)</span>
-<span id="cb27-5"><a href="#cb27-5" aria-hidden="true" tabindex="-1"></a>  </span>
-<span id="cb27-6"><a href="#cb27-6" aria-hidden="true" tabindex="-1"></a>matches <span class="sc">%&gt;%</span> <span class="fu">select</span>(playerID.cohort) <span class="sc">%&gt;%</span> <span class="fu">unique</span>() <span class="sc">%&gt;%</span> <span class="fu">nrow</span>()</span></code></pre></div>
-<pre><code>## [1] 20</code></pre>
-<p>Yes, all 20 are age-matched. Let’s look at the matches. John Allen is age-matched to two Hall of Famers, Harry Burrell to one, etc., for 35 matches. =</p>
-<div class="sourceCode" id="cb29"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a>matches <span class="sc">%&gt;%</span></span>
-<span id="cb29-2"><a href="#cb29-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(<span class="at">playerID =</span> playerID.cohort, nameFirst, nameLast, birthYear, deathYear,</span>
-<span id="cb29-3"><a href="#cb29-3" aria-hidden="true" tabindex="-1"></a>         playerID.hof, inductionYear) <span class="sc">%&gt;%</span></span>
-<span id="cb29-4"><a href="#cb29-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(playerID)</span></code></pre></div>
-<pre><code>## # A tibble: 35 x 7
-##    playerID  nameFirst nameLast   birthYear deathYear playerID.hof inductionYear
-##    &lt;chr&gt;     &lt;chr&gt;     &lt;chr&gt;          &lt;dbl&gt;     &lt;dbl&gt; &lt;chr&gt;                &lt;dbl&gt;
-##  1 allenjo01 John      Allen           1890      1967 careyma01             1961
-##  2 allenjo01 John      Allen           1890      1967 ricesa01              1963
-##  3 burreha01 Harry     Burrell         1869      1914 nichoki01             1949
-##  4 crawfgl01 Glenn     Crawford        1913      1972 mizejo01              1981
-##  5 doranto01 Tom       Doran           1880      1910 crawfsa01             1957
-##  6 doranto01 Tom       Doran           1880      1910 tinkejo01             1946
-##  7 dormare01 Red       Dorman          1905      1974 ferreri01             1984
-##  8 dormare01 Red       Dorman          1905      1974 lindsfr01             1976
-##  9 ezzelho01 Homer     Ezzell          1896      1976 hornsro01             1942
-## 10 fitzgma01 Matty     Fitzgerald      1880      1949 crawfsa01             1957
-## # ... with 25 more rows</code></pre>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">1234</span>)</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>random_rownums <span class="ot">&lt;-</span> <span class="fu">runif</span>(<span class="dv">20</span>, <span class="dv">1</span>, <span class="fu">nrow</span>(age_matched_cohort)) <span class="sc">%&gt;%</span> <span class="fu">as.integer</span>()</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>matches <span class="ot">&lt;-</span> age_matched_cohort[random_rownums, ] <span class="sc">%&gt;%</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">inner_join</span>(hall_of_famers, <span class="at">by =</span> <span class="st">&quot;birthYear&quot;</span>, <span class="at">suffix =</span> <span class="fu">c</span>(<span class="st">&quot;.cohort&quot;</span>, <span class="st">&quot;.hof&quot;</span>)) <span class="sc">%&gt;%</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(<span class="fu">coalesce</span>(deathYear, <span class="dv">9999</span>) <span class="sc">&gt;</span> inductionYear,</span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>         playerID.cohort <span class="sc">!=</span> playerID.hof) <span class="sc">%&gt;%</span></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(playerID.cohort, nameFirst, nameLast, hofID, birthYear, deathYear,</span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>         playerID.hof, inductionYear)</span></code></pre></div>
+<p>A player is age-matched if 1) there was a Hall of Famer inducted while alive who shares the same birth year, and 2) they were alive during the induction year too. Are these players correctly age-matched correctly? Yes, all 20 are age-matched.</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>matches <span class="sc">%&gt;%</span> <span class="fu">select</span>(playerID.cohort) <span class="sc">%&gt;%</span> <span class="fu">unique</span>() <span class="sc">%&gt;%</span> <span class="fu">nrow</span>()</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="do">## [1] 20</span></span></code></pre></div>
+<p>Let’s look at some of the matches. Dick Allen was nominator to the Hall but he was never inducted. He was still alive when Tony Perez was inducted in 2000. Both were born in 1942. Art Bues was alive when Tris Speaker was inducted in 1937, and both were born in 1888. Glen Cox shared the same birth year as five Hall of Famers inducted while still alive. Glen Cox was still alive as of 2002.</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>matches <span class="sc">%&gt;%</span> <span class="fu">arrange</span>(playerID.cohort)</span></code></pre></div>
+<pre><code>## # A tibble: 36 x 8
+##    playerID.cohort nameFirst nameLast  hofID      birthYear deathYear playerID.hof
+##    &lt;chr&gt;           &lt;chr&gt;     &lt;chr&gt;     &lt;chr&gt;          &lt;dbl&gt;     &lt;dbl&gt; &lt;chr&gt;       
+##  1 allendi01       Dick      Allen     allendi01h      1942        NA perezto01   
+##  2 buesar01        Art       Bues      &lt;NA&gt;            1888      1954 speaktr01   
+##  3 coxgl01         Glenn     Cox       &lt;NA&gt;            1931        NA bankser01   
+##  4 coxgl01         Glenn     Cox       &lt;NA&gt;            1931        NA bunniji01   
+##  5 coxgl01         Glenn     Cox       &lt;NA&gt;            1931        NA mantlmi01   
+##  6 coxgl01         Glenn     Cox       &lt;NA&gt;            1931        NA matheed01   
+##  7 coxgl01         Glenn     Cox       &lt;NA&gt;            1931        NA mayswi01    
+##  8 doschja01       Jack      Doscher   &lt;NA&gt;            1880      1971 crawfsa01   
+##  9 doschja01       Jack      Doscher   &lt;NA&gt;            1880      1971 tinkejo01   
+## 10 doughto01       Tom       Dougherty &lt;NA&gt;            1881      1953 eversjo01   
+## # ... with 26 more rows, and 1 more variable: inductionYear &lt;dbl&gt;</code></pre>
+<p>Why is my data set so much longer than Abel and Kruger’s - what am I missing here?</p>
 </div>
 </div>
 <div id="references" class="section level1">
 <h1>References</h1>
-<p>Ernest L. Abel &amp; Michael L. Kruger (2005) The Longevity of Baseball Hall of Famers Compared to Other Players, Death Studies, 29:10, 959-963, DOI: <a href="https://doi.org/10.1080/07481180500299493">10.1080/07481180500299493</a>. <a href="http://www.med.mcgill.ca/epidemiology/hanley/bios601/CandHchapter06/baseball_players.pdf">PDF</a>.</p>
-<p><a href="https://www.seanlahman.com/baseball-archive/statistics/">Sean Lahman’s Baseball Database</a>.</p>
+<p><a id="Abel2005"></a>Ernest L. Abel &amp; Michael L. Kruger (2005) The Longevity of Baseball Hall of Famers Compared to Other Players, Death Studies, 29:10, 959-963, DOI: <a href="https://doi.org/10.1080/07481180500299493">10.1080/07481180500299493</a>. <a href="http://www.med.mcgill.ca/epidemiology/hanley/bios601/CandHchapter06/baseball_players.pdf">PDF</a>.</p>
+<p><a id="Lahman2002"></a><a href="https://www.seanlahman.com/baseball-archive/statistics/">Sean Lahman’s Baseball Database</a>.</p>
+</div>
+<div class="footnotes">
+<hr />
+<ol>
+<li id="fn1"><p>There is also a zipped csv archive, but it lacks column headers.<a href="#fnref1" class="footnote-back">↩︎</a></p></li>
+<li id="fn2"><p>To confirm my understanding, I compared the <code>playerID</code> values from the <strong>Batting</strong>, <strong>Fielding</strong>, and <strong>Pitching</strong> tables. The union of values is the same as those in <code>Master</code>.<a href="#fnref2" class="footnote-back">↩︎</a></p></li>
+<li id="fn3"><p>I get 143 rows if I exclude the 2002 induction year, but the age mean and SD are still off.<a href="#fnref3" class="footnote-back">↩︎</a></p></li>
+</ol>
 </div>
 
 

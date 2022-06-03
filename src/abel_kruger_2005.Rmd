@@ -18,7 +18,7 @@ knit: (function(inputFile, encoding) {
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-Abel and Kruger (2005) use professional baseball player data to evaluate the role of awarded achievement within the sport on longevity. The authors hypothesize that players inducted into the Baseball Hall of Fame have longer longevities than players of the same age who are not inducted. This workbook reproduces the results from the same source data and methods.
+Abel and Kruger ([2005](#Abel2005)) use professional baseball player data to evaluate the role of awarded achievement within the sport on longevity. The authors hypothesize that players inducted into the Baseball Hall of Fame have longer longevities than players of the same age who are not inducted. This workbook reproduces the results from the same source data and methods.
 
 ```{r include=FALSE}
 # library(Lahman)  # has latest data
@@ -29,16 +29,16 @@ library(scales)
 
 # Data
 
-The authors used the 2002 Lahman database, Version 5.0 (2002). I downloaded the Access database and exported the **HallOfFame** and **Master** tables to csv. (There is also a zipped csv archive, but it lacks column headers.)
+The authors used the 2002 Lahman database, Version 5.0 ([2002](#Lahman2002)). I downloaded the Access database and exported the **HallOfFame** and **Master** tables to csv.^[There is also a zipped csv archive, but it lacks column headers.]
 
 ```{r warning=FALSE, message=FALSE}
 Master <- read_csv("../data/lahman_50-2k/Master.csv")
 HallOfFame <- read_csv("../data/lahman_50-2k/HallOfFame.csv")
 ```
 
-The `playerID` column in `Master` identifies people who played games (as opposed to managing or broadcasting, etc.). Of the `r comma(nrow(Master))` rows in the data set, `r comma(n_distinct(Master$playerID))` are players. Just to confirm this assumption, I'll get the playerIDs from the **Batting**, **Fielding**, and **Pitching** tables. Are these confirmed players the same as those in **Master**?
+`Master` includes non-players (executives, announcers, and umpires) who were inducted into the Hall of Fame. Actual players are identified by a non-empty `playerID` column. Of the `r comma(nrow(Master))` rows in the data set, `r comma(n_distinct(Master$playerID))` are players.^[To confirm my understanding, I compared the `playerID` values from the **Batting**, **Fielding**, and **Pitching** tables. The union of values is the same as those in `Master`.]
 
-```{r}
+```{r include=FALSE, eval=FALSE}
 Batting <- read_csv("../data/lahman_50-2k/Batting.csv")
 Fielding <- read_csv("../data/lahman_50-2k/Fielding.csv")
 Pitching <- read_csv("../data/lahman_50-2k/Pitching.csv")
@@ -51,37 +51,37 @@ Master %>% filter(playerID %in% player_ids) %>% nrow()
 Master %>% filter(!playerID %in% player_ids & !is.na(playerID)) %>% nrow()
 ```
 
-The *Results* section of the article explains the data set (page 961).
+The *Results* section of the article summarizes the row counts of the analysis data set derived from these tables (page 961).
 
 > One hundred and forty-three (143) players in the Hall of Fame had been inducted into the Baseball Hall of Fame while still alive as of 2002. These were age-matched with 3,430 players. The mean age of the Hall of Famers at time of induction
 was 57.5 years (SD $\pm$ 12.4). A total of 1,695 of these players had died by the end of 2002.
 
-Capture the 143 Hall of Famers in object `hall_of_famers`.
+The code chunk below identifies the 143 Hall of Famers as object `hall_of_famers`. The criteria is in the filter: 1) inducted into the Hall, 2) as a player, 3) through 2002, and 4) while alive.
 
 ```{r}
 hall_of_famers <- HallOfFame %>% 
   inner_join(Master, by = "hofID") %>%
   filter(
     inducted == "Y",
-    category == "Player",
-    yearid < 2002,
-    coalesce(deathYear, 9999) > yearid,
-    !is.na(playerID)
+    # Inducted as a player _and_ has a playerID identifier (need both!)
+    category == "Player", !is.na(playerID),
+    yearid < 2003,
+    coalesce(deathYear, 9999) > yearid
   ) %>% 
   mutate(age_at_induction = yearid - birthYear) %>%
   select(playerID, inductionYear = yearid, birthYear, age_at_induction)
 ```
 
-Does this match the article? Almost, but not quite. I get the 143 rows, but the mean $\pm$ SD age at induction is a little off.
+Does this match the article? Not quite. I get 144 rows^[I get 143 rows if I exclude the 2002 induction year, but the age mean and SD are still off.], and the mean $\pm$ SD age at induction is slightly off.
 
 ```{r collapse=TRUE}
-# Matches 143 in article.
+# Does not match 143 in article.
 nrow(hall_of_famers)
 
-# Doesn't quite match 57.5 in article.
+# Does not match 57.5 in article.
 mean(hall_of_famers$age_at_induction)
 
-# Doesn't quite match 12.4 in article.
+# Does not match 12.4 in article.
 sd(hall_of_famers$age_at_induction)
 ```
 
@@ -89,21 +89,24 @@ The *Methods and Materials* section of the article elaborates the age-matching c
 
 > [age-matched players] were alive at the time of induction when induction occurred for their case-matched cohort. Only players were included in our analysis (executives, announcers, umpires were not included; managers were included who had also been players).
 
-The following code chunk identifies every player who shares the same age as a Hall of Famer _and_ was alive at that Hall of Famer's induction year. Note that a player may have been alive for one Hall of Famer's induction, but not for a later induction of another Hall of Famer. 
+The code chunk below identifies every player who shares the same age as a Hall of Famer _and_ was alive at that Hall of Famer's induction year. Note that a player may have been alive for one Hall of Famer's induction, but not for the later induction of another Hall of Famer with the same birth year. 
 
 ```{r}
 age_matched_cohort <- Master %>%
-  filter(!is.na(playerID)) %>%
   inner_join(hall_of_famers, by = "birthYear", suffix = c("", ".hof")) %>%
-  filter((!is.na(deathYear) | deathYear > inductionYear),
-         playerID != playerID.hof) %>%
+  filter(
+    !is.na(playerID),
+    coalesce(deathYear, 9999) > inductionYear,
+    playerID != playerID.hof
+  ) %>%
   select(playerID, birthYear, deathYear, nameFirst, nameLast, hofID) %>%
+  # A player can match multiple Hall of Famers
   unique()
 ```
 
-Does this match the article? I'm not even close. `age_matched_cohort` should have 3,430 players. Instead, it has `r scales::comma(nrow(age_matched_cohort))` players. 
+Does this match the article? Not even close. `age_matched_cohort` should have 3,430 players. Instead, it has `r scales::comma(nrow(age_matched_cohort))` players. I tried defining age-match as sharing both birth year and birth month, but that yielded a result set that was way too *small*.
 
-```{r}
+```{r collapse=TRUE}
 nrow(age_matched_cohort)
 ```
 
@@ -115,32 +118,30 @@ What went wrong? Let's audit 20 random players of `age_matched_cohort`. Since `a
 set.seed(1234)
 random_rownums <- runif(20, 1, nrow(age_matched_cohort)) %>% as.integer()
 
-age_matched_cohort[random_rownums, ] %>%
-  select(playerID, nameFirst, nameLast, hofID, birthYear, deathYear)
-```
-
-Are these players correctly age-matched correctly? They are age-matched if 1) there was a Hall of Famer inducted while alive who shares the same birth year, and 2) they were alive during the induction year too.
-
-```{r}
 matches <- age_matched_cohort[random_rownums, ] %>%
   inner_join(hall_of_famers, by = "birthYear", suffix = c(".cohort", ".hof")) %>%
-  filter((!is.na(deathYear) | deathYear > inductionYear),
-         playerID.cohort != playerID.hof)
-  
+  filter(coalesce(deathYear, 9999) > inductionYear,
+         playerID.cohort != playerID.hof) %>%
+  select(playerID.cohort, nameFirst, nameLast, hofID, birthYear, deathYear,
+         playerID.hof, inductionYear)
+```
+
+A player is age-matched if 1) there was a Hall of Famer inducted while alive who shares the same birth year, and 2) they were alive during the induction year too. Are these players correctly age-matched correctly? Yes, all 20 are age-matched.
+
+```{r collapse=TRUE}
 matches %>% select(playerID.cohort) %>% unique() %>% nrow()
 ```
 
-Yes, all 20 are age-matched. Let's look at the matches. John Allen is age-matched to two Hall of Famers, Harry Burrell to one, etc., for 35 matches. =
+Let's look at some of the matches. Dick Allen was nominator to the Hall but he was never inducted. He was still alive when Tony Perez was inducted in 2000. Both were born in 1942. Art Bues was alive when Tris Speaker was inducted in 1937, and both were born in 1888. Glen Cox shared the same birth year as five Hall of Famers inducted while still alive. Glen Cox was still alive as of 2002.
 
 ```{r}
-matches %>%
-  select(playerID = playerID.cohort, nameFirst, nameLast, birthYear, deathYear,
-         playerID.hof, inductionYear) %>%
-  arrange(playerID)
+matches %>% arrange(playerID.cohort)
 ```
+
+Why is my data set so much longer than Abel and Kruger's - what am I missing here?
 
 # References
 
-Ernest L. Abel & Michael L. Kruger (2005) The Longevity of Baseball Hall of Famers Compared to Other Players, Death Studies, 29:10, 959-963, DOI: [10.1080/07481180500299493](https://doi.org/10.1080/07481180500299493). [PDF](http://www.med.mcgill.ca/epidemiology/hanley/bios601/CandHchapter06/baseball_players.pdf).
+<a id="Abel2005"></a>Ernest L. Abel & Michael L. Kruger (2005) The Longevity of Baseball Hall of Famers Compared to Other Players, Death Studies, 29:10, 959-963, DOI: [10.1080/07481180500299493](https://doi.org/10.1080/07481180500299493). [PDF](http://www.med.mcgill.ca/epidemiology/hanley/bios601/CandHchapter06/baseball_players.pdf).
 
-[Sean Lahman's Baseball Database](https://www.seanlahman.com/baseball-archive/statistics/).
+<a id="Lahman2002"></a>[Sean Lahman's Baseball Database](https://www.seanlahman.com/baseball-archive/statistics/).
