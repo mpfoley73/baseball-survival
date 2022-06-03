@@ -366,7 +366,7 @@ div.tocify {
 <span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    inducted <span class="sc">==</span> <span class="st">&quot;Y&quot;</span>,</span>
 <span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Inducted as a player _and_ has a playerID identifier (need both!)</span></span>
 <span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    category <span class="sc">==</span> <span class="st">&quot;Player&quot;</span>, <span class="sc">!</span><span class="fu">is.na</span>(playerID),</span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    yearid <span class="sc">&lt;</span> <span class="dv">2003</span>,</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    yearid <span class="sc">&lt;=</span> <span class="dv">2002</span>,</span>
 <span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="fu">coalesce</span>(deathYear, <span class="dv">9999</span>) <span class="sc">&gt;</span> yearid</span>
 <span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">%&gt;%</span> </span>
 <span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">age_at_induction =</span> yearid <span class="sc">-</span> birthYear) <span class="sc">%&gt;%</span></span>
@@ -392,15 +392,15 @@ div.tocify {
 <span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">inner_join</span>(hall_of_famers, <span class="at">by =</span> <span class="st">&quot;birthYear&quot;</span>, <span class="at">suffix =</span> <span class="fu">c</span>(<span class="st">&quot;&quot;</span>, <span class="st">&quot;.hof&quot;</span>)) <span class="sc">%&gt;%</span></span>
 <span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(</span>
 <span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="sc">!</span><span class="fu">is.na</span>(playerID),</span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    <span class="fu">coalesce</span>(deathYear, <span class="dv">9999</span>) <span class="sc">&gt;</span> inductionYear,</span>
-<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    playerID <span class="sc">!=</span> playerID.hof</span>
-<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">%&gt;%</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    <span class="fu">coalesce</span>(deathYear, <span class="dv">9999</span>) <span class="sc">&gt;</span> inductionYear</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">%&gt;%</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">anti_join</span>(hall_of_famers, <span class="at">by =</span> <span class="st">&quot;playerID&quot;</span>) <span class="sc">%&gt;%</span></span>
 <span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(playerID, birthYear, deathYear, nameFirst, nameLast, hofID) <span class="sc">%&gt;%</span></span>
 <span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>  <span class="co"># A player can match multiple Hall of Famers</span></span>
 <span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">unique</span>()</span></code></pre></div>
-<p>Does this match the article? Not even close. <code>age_matched_cohort</code> should have 3,430 players. Instead, it has 6,645 players. I tried defining age-match as sharing both birth year and birth month, but that yielded a result set that was way too <em>small</em>.</p>
+<p>Does this match the article? Not even close. <code>age_matched_cohort</code> should have 3,430 players. Instead, it has 6,539 players. I tried defining age-match as sharing both birth year and birth month, but that yielded a result set that was way too <em>small</em>.</p>
 <div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="fu">nrow</span>(age_matched_cohort)</span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="do">## [1] 6645</span></span></code></pre></div>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="do">## [1] 6539</span></span></code></pre></div>
 <div id="what-went-wrong" class="section level2">
 <h2>What went wrong?</h2>
 <p>What went wrong? Let’s audit 20 random players of <code>age_matched_cohort</code>. Since <code>age_matched_cohort</code> has so many more players than it should have, at least one of these players should be unjustified.</p>
@@ -411,27 +411,39 @@ div.tocify {
 <span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">inner_join</span>(hall_of_famers, <span class="at">by =</span> <span class="st">&quot;birthYear&quot;</span>, <span class="at">suffix =</span> <span class="fu">c</span>(<span class="st">&quot;.cohort&quot;</span>, <span class="st">&quot;.hof&quot;</span>)) <span class="sc">%&gt;%</span></span>
 <span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(<span class="fu">coalesce</span>(deathYear, <span class="dv">9999</span>) <span class="sc">&gt;</span> inductionYear,</span>
 <span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>         playerID.cohort <span class="sc">!=</span> playerID.hof) <span class="sc">%&gt;%</span></span>
-<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(playerID.cohort, nameFirst, nameLast, hofID, birthYear, deathYear,</span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(playerID.cohort, nameFirst, nameLast, birthYear, deathYear,</span>
 <span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>         playerID.hof, inductionYear)</span></code></pre></div>
 <p>A player is age-matched if 1) there was a Hall of Famer inducted while alive who shares the same birth year, and 2) they were alive during the induction year too. Are these players correctly age-matched correctly? Yes, all 20 are age-matched.</p>
 <div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>matches <span class="sc">%&gt;%</span> <span class="fu">select</span>(playerID.cohort) <span class="sc">%&gt;%</span> <span class="fu">unique</span>() <span class="sc">%&gt;%</span> <span class="fu">nrow</span>()</span>
 <span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="do">## [1] 20</span></span></code></pre></div>
-<p>Let’s look at some of the matches. Dick Allen was nominator to the Hall but he was never inducted. He was still alive when Tony Perez was inducted in 2000. Both were born in 1942. Art Bues was alive when Tris Speaker was inducted in 1937, and both were born in 1888. Glen Cox shared the same birth year as five Hall of Famers inducted while still alive. Glen Cox was still alive as of 2002.</p>
-<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>matches <span class="sc">%&gt;%</span> <span class="fu">arrange</span>(playerID.cohort)</span></code></pre></div>
-<pre><code>## # A tibble: 36 x 8
-##    playerID.cohort nameFirst nameLast  hofID      birthYear deathYear playerID.hof
-##    &lt;chr&gt;           &lt;chr&gt;     &lt;chr&gt;     &lt;chr&gt;          &lt;dbl&gt;     &lt;dbl&gt; &lt;chr&gt;       
-##  1 allendi01       Dick      Allen     allendi01h      1942        NA perezto01   
-##  2 buesar01        Art       Bues      &lt;NA&gt;            1888      1954 speaktr01   
-##  3 coxgl01         Glenn     Cox       &lt;NA&gt;            1931        NA bankser01   
-##  4 coxgl01         Glenn     Cox       &lt;NA&gt;            1931        NA bunniji01   
-##  5 coxgl01         Glenn     Cox       &lt;NA&gt;            1931        NA mantlmi01   
-##  6 coxgl01         Glenn     Cox       &lt;NA&gt;            1931        NA matheed01   
-##  7 coxgl01         Glenn     Cox       &lt;NA&gt;            1931        NA mayswi01    
-##  8 doschja01       Jack      Doscher   &lt;NA&gt;            1880      1971 crawfsa01   
-##  9 doschja01       Jack      Doscher   &lt;NA&gt;            1880      1971 tinkejo01   
-## 10 doughto01       Tom       Dougherty &lt;NA&gt;            1881      1953 eversjo01   
-## # ... with 26 more rows, and 1 more variable: inductionYear &lt;dbl&gt;</code></pre>
+<p>Let’s look at some of the matches. Ethan Allen was still alive when Red Ruffing was inducted in 1967. Both were born in 1904. Art Bues was alive when Tris Speaker was inducted in 1937, and both were born in 1888. Douglas Whammy shared the same birth year as three Hall of Famers inducted while still alive. Douglas Whammy was still alive as of 2002.</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>Master <span class="sc">%&gt;%</span> <span class="fu">filter</span>(playerID <span class="sc">==</span> <span class="st">&quot;ruffire01&quot;</span>)</span></code></pre></div>
+<pre><code>## # A tibble: 1 x 32
+##   lahmanID playerID  managerID hofID      birthYear birthMonth birthDay birthCountry
+##      &lt;dbl&gt; &lt;chr&gt;     &lt;chr&gt;     &lt;chr&gt;          &lt;dbl&gt;      &lt;dbl&gt;    &lt;dbl&gt; &lt;chr&gt;       
+## 1    12319 ruffire01 &lt;NA&gt;      ruffire01h      1904          5        3 USA         
+## # ... with 24 more variables: birthState &lt;chr&gt;, birthCity &lt;chr&gt;,
+## #   deathYear &lt;dbl&gt;, deathMonth &lt;dbl&gt;, deathDay &lt;dbl&gt;, deathCountry &lt;chr&gt;,
+## #   deathState &lt;chr&gt;, deathCity &lt;chr&gt;, nameFirst &lt;chr&gt;, nameLast &lt;chr&gt;,
+## #   nameNote &lt;chr&gt;, nameGiven &lt;chr&gt;, nameNick &lt;chr&gt;, weight &lt;dbl&gt;,
+## #   height &lt;dbl&gt;, bats &lt;chr&gt;, throws &lt;chr&gt;, debut &lt;chr&gt;, college &lt;chr&gt;,
+## #   lahman40ID &lt;chr&gt;, lahman45ID &lt;chr&gt;, retroID &lt;chr&gt;, holtzID &lt;chr&gt;,
+## #   bbrefID &lt;chr&gt;</code></pre>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>matches <span class="sc">%&gt;%</span> <span class="fu">arrange</span>(playerID.cohort)</span></code></pre></div>
+<pre><code>## # A tibble: 37 x 7
+##    playerID.cohort nameFirst nameLast  birthYear deathYear playerID.hof
+##    &lt;chr&gt;           &lt;chr&gt;     &lt;chr&gt;         &lt;dbl&gt;     &lt;dbl&gt; &lt;chr&gt;       
+##  1 allenet01       Ethan     Allen          1904      1993 ruffire01   
+##  2 buesar01        Art       Bues           1888      1954 speaktr01   
+##  3 coxla01         Larry     Cox            1947      1990 benchjo01   
+##  4 doughto01       Tom       Dougherty      1881      1953 eversjo01   
+##  5 doughto01       Tom       Dougherty      1881      1953 walshed01   
+##  6 douglwh01       Whammy    Douglas        1935        NA gibsobo01   
+##  7 douglwh01       Whammy    Douglas        1935        NA koufasa01   
+##  8 douglwh01       Whammy    Douglas        1935        NA robinfr02   
+##  9 fanweha01       Harry     Fanwell        1886      1965 bakerfr01   
+## 10 fanweha01       Harry     Fanwell        1886      1965 cobbty01    
+## # ... with 27 more rows, and 1 more variable: inductionYear &lt;dbl&gt;</code></pre>
 <p>Why is my data set so much longer than Abel and Kruger’s - what am I missing here?</p>
 </div>
 </div>

@@ -65,7 +65,7 @@ hall_of_famers <- HallOfFame %>%
     inducted == "Y",
     # Inducted as a player _and_ has a playerID identifier (need both!)
     category == "Player", !is.na(playerID),
-    yearid < 2003,
+    yearid <= 2002,
     coalesce(deathYear, 9999) > yearid
   ) %>% 
   mutate(age_at_induction = yearid - birthYear) %>%
@@ -96,9 +96,9 @@ age_matched_cohort <- Master %>%
   inner_join(hall_of_famers, by = "birthYear", suffix = c("", ".hof")) %>%
   filter(
     !is.na(playerID),
-    coalesce(deathYear, 9999) > inductionYear,
-    playerID != playerID.hof
+    coalesce(deathYear, 9999) > inductionYear
   ) %>%
+  anti_join(hall_of_famers, by = "playerID") %>%
   select(playerID, birthYear, deathYear, nameFirst, nameLast, hofID) %>%
   # A player can match multiple Hall of Famers
   unique()
@@ -122,7 +122,7 @@ matches <- age_matched_cohort[random_rownums, ] %>%
   inner_join(hall_of_famers, by = "birthYear", suffix = c(".cohort", ".hof")) %>%
   filter(coalesce(deathYear, 9999) > inductionYear,
          playerID.cohort != playerID.hof) %>%
-  select(playerID.cohort, nameFirst, nameLast, hofID, birthYear, deathYear,
+  select(playerID.cohort, nameFirst, nameLast, birthYear, deathYear,
          playerID.hof, inductionYear)
 ```
 
@@ -132,7 +132,10 @@ A player is age-matched if 1) there was a Hall of Famer inducted while alive who
 matches %>% select(playerID.cohort) %>% unique() %>% nrow()
 ```
 
-Let's look at some of the matches. Dick Allen was nominator to the Hall but he was never inducted. He was still alive when Tony Perez was inducted in 2000. Both were born in 1942. Art Bues was alive when Tris Speaker was inducted in 1937, and both were born in 1888. Glen Cox shared the same birth year as five Hall of Famers inducted while still alive. Glen Cox was still alive as of 2002.
+Let's look at some of the matches. Ethan Allen was still alive when Red Ruffing was inducted in 1967. Both were born in 1904. Art Bues was alive when Tris Speaker was inducted in 1937, and both were born in 1888. Douglas Whammy shared the same birth year as three Hall of Famers inducted while still alive. Douglas Whammy was still alive as of 2002.
+```{r}
+Master %>% filter(playerID == "ruffire01")
+```
 
 ```{r}
 matches %>% arrange(playerID.cohort)
