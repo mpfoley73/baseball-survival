@@ -1,0 +1,23 @@
+---
+title: "Reproducing the 2022 Redelmeier and Singh Study"
+author: "Michael Foley"
+date: "`r Sys.Date()`"
+output: html_document
+output: 
+  html_document:
+    css: "style.css"
+    theme: flatly
+    toc: true
+    toc_float: true
+    highlight: haddock
+    code_folding: show
+knit: (function(inputFile, encoding) {
+  rmarkdown::render(inputFile, encoding = encoding, output_dir = "../docs") })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Data is made available at https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/NBX5SJ, linked to from [OAJOUR](https://openaccess.oajour.info/2022/04/13/long-term-mortality-of-academy-award-winning-actors-and-actresses/.)
+

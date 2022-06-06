@@ -1,0 +1,155 @@
+---
+title: "Reproducing the 2008 Sain Onge, Rogers, and Krueger Study"
+author: "Michael Foley"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    css: "style.css"
+    theme: flatly
+    toc: true
+    toc_float: true
+    highlight: haddock
+    code_folding: show
+knit: (function(inputFile, encoding) {
+  rmarkdown::render(inputFile, encoding = encoding, output_dir = "../docs") })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Saint Onge et at ([2008](#SaintOnge2008)) use professional baseball player data to evaluate the role of anthropomorphic measures (height, body mass, handedness) and performance measures (career length, total player rating) on longevity. Using a discrete time hazards model, the authors find MLB players can expect almost five additional years of life. This workbook reproduces the results from the same source data and methods.
+
+```{r include=FALSE}
+library(Lahman)
+library(tidyverse)
+library(lubridate)
+library(scales)
+library(gtsummary)
+```
+
+# Data and Methods
+
+The authors used data from the electron version of *Total Baseball* ([Google Scholar](https://scholar.google.com/scholar_lookup?title=Total+Baseball&publication_year=2004&)), but it was last published in 2008, so I will instead rely on the Lahman R package.
+
+```{r}
+data("People", "Fielding", package = "Lahman")
+```
+
+## Variables
+
+The authors created a person-year data set, with one row per player per year from debut to year of death (or censor). The data set included 241,218 person-years for 1902 - 2004 (103 years) and 6,772 players. Players were included in the data set if 1) they debuted between 1902 and 2004, 2) they were a position player (pitchers excluded), and 3) there were more than just a September call-up. Regarding condition 3, that means either the debut month number was less than 9, or their final game year was greater than their debut year.
+
+```{r}
+People <- People %>%
+  mutate(
+    debutYear = year(debut),
+    debutMonth = month(debut),
+    finalGameYear = year(finalGame)
+  )
+
+person_year_0 <-
+  expand.grid(
+    playerID = unique(People$playerID), 
+    yr = c(1902:2004)
+  ) %>%
+  inner_join(People, by = "playerID") %>%
+  semi_join(Fielding %>% filter(POS != "P"), by = "playerID") %>%
+  filter(
+    debutYear >= 1902,
+    debutYear <= yr, coalesce(deathYear, 9999) >= yr,
+    debutMonth < 9 | finalGameYear > debutYear
+  )
+```
+
+I don't quite match, but this isn't bad considering I'm using a different data source.
+
+```{r collapse=TRUE}
+# 241,218 person-years? No, 246,402.
+nrow(person_year_0)
+
+# 6,772 players? No, 7,002.
+n_distinct(person_year_0$playerID)
+
+# 3,030 deaths? No, 3,191.
+person_year_0 %>% filter(deathYear <= 2004) %>% pull(playerID) %>% n_distinct()
+```
+
+Define other variables.
+
+```{r}
+person_year <- person_year_0 %>%
+  mutate(
+    era = factor(
+      case_when(between(debutYear, 1902, 1945) ~ "Early",
+                between(debutYear, 1946, 1968) ~ "Golden",
+                between(debutYear, 1969, 2004) ~ "Modern"),
+      levels = c("Early", "Golden", "Modern")
+    ),
+    age = time_length(interval(birthDate, ymd(paste0(yr, "0101"))), "years"),
+    age_bin = cut(
+      age, 
+      breaks = c(15, 19 + 5 * (1:13), 1000)
+    ),
+    height_bin = factor(if_else(
+      height >= 72, 1, 0), 
+      levels = c(0, 1), 
+      labels = c("<6 feet", ">=6 feet")
+    ),
+    bmi = weight / height^2 * 703,
+    bmi_bin = case_when(
+      bmi >= 18.5 & bmi < 25.0 ~ "Normal (18.5 - <25.0)",
+      bmi >= 25.0 & bmi < 30.0 ~ "Overweight (25.0 – <30.0)",
+      bmi >= 30.0 & bmi < 35.0 ~ "Obese Class I (30.0 – <35.0)"
+    ),
+    bmi_bin = factor(
+      bmi_bin, levels = c("Normal (18.5 - <25.0)",
+                          "Overweight (25.0 – <30.0)",
+                          "Obese Class I (30.0 – <35.0)")
+    ),
+    career_length = time_length(interval(debut, finalGame), "years"),
+    career_length_bin = factor(
+      if_else(career_length < 10, "< 10 years", "10+ years"),
+      levels = c("< 10 years", "10+ years")
+    ),
+    throws = factor(
+      throws, 
+      levels = c("R", "L"), 
+      labels = c("Right Handed", "Left Handed")
+    ),
+    status = if_else(deathYear == yr, 1L, 0L)
+  )
+```
+
+Table 1 presents the descriptive statistics of the covariates based on the pooled person-years.
+
+```{r}
+person_year %>%
+  tbl_summary(
+    label = list(
+      age_bin ~ "Age Group",
+      era ~ "Cohort",
+      bmi_bin ~ "Body Mass Index",
+      height_bin ~ "Height",
+      throws ~ "Handedness",
+      career_length_bin = "Seasons Played",
+      status = "Died"
+    ),
+    include = c(status, age_bin, era, bmi_bin, height_bin, throws, 
+                career_length_bin)
+  )
+```
+
+## Method
+
+The authors use logistic regression to estimate a discrete time hazards model for risk of death between the debut date and the end of the follow-up period. They explain that they start with debut date rather than birth date because by definition all players have survived until their debut. The advantage of using a discrete time hazards model over a Cox proportional hazards model is that you can calculate life tables with covariates.
+
+```{r}
+mdl <- glm(status ~ age_bin, data = person_year, family = binomial(link = "cloglog"))
+summary(mdl)
+```
+
+
+# References
+
+<a id="SaintOnge2008"></a>Saint Onge JM, Rogers RG, Krueger PM. Major League Baseball Players' Life Expectancies. Soc Sci Q. 2008;89(3):817-830. doi:10.1111/j.1540-6237.2008.00562.x. [HTML](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2743321/).
