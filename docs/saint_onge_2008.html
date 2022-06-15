@@ -11,7 +11,7 @@
 
 <meta name="author" content="Michael Foley" />
 
-<meta name="date" content="2022-06-05" />
+<meta name="date" content="2022-06-15" />
 
 <title>Reproducing the 2008 Sain Onge, Rogers, and Krueger Study</title>
 
@@ -1374,6 +1374,40 @@ window.initializeCodeFolding = function(show) {
 
 }
 </script>
+<style type="text/css">.tabwid table{
+border-spacing:0px !important;
+border-collapse:collapse;
+line-height:1;
+margin-left:auto;
+margin-right:auto;
+border-width: 0;
+display: table;
+margin-top: 1.275em;
+margin-bottom: 1.275em;
+border-color: transparent;
+}
+.tabwid_left table{
+margin-left:0;
+}
+.tabwid_right table{
+margin-right:0;
+}
+.tabwid td {
+padding: 0;
+}
+.tabwid a {
+text-decoration: none;
+}
+.tabwid thead {
+background-color: transparent;
+}
+.tabwid tfoot {
+background-color: transparent;
+}
+.tabwid table tr {
+background-color: transparent;
+}
+</style>
 
 <style type="text/css">
   code{white-space: pre-wrap;}
@@ -1682,7 +1716,7 @@ div.tocify {
 <h1 class="title toc-ignore">Reproducing the 2008 Sain Onge, Rogers, and
 Krueger Study</h1>
 <h4 class="author">Michael Foley</h4>
-<h4 class="date">2022-06-05</h4>
+<h4 class="date">2022-06-15</h4>
 
 </div>
 
@@ -1691,15 +1725,21 @@ Krueger Study</h1>
 baseball player data to evaluate the role of anthropomorphic measures
 (height, body mass, handedness) and performance measures (career length,
 total player rating) on longevity. Using a discrete time hazards model,
-the authors find MLB players can expect almost five additional years of
-life. This workbook reproduces the results from the same source data and
+the authors find:</p>
+<ul>
+<li>MLB players can expect almost five additional years of life.</li>
+<li>Height, weight, handedness, and player ratings are not associated
+with the risk of death, and</li>
+<li>Career length is inversely associated with the risk of death</li>
+</ul>
+<p>This workbook reproduces the results from the same source data and
 methods.</p>
 <div id="data-and-methods" class="section level1">
 <h1>Data and Methods</h1>
-<p>The authors used data from the electron version of <em>Total
+<p>The authors used data from the electronic version of <em>Total
 Baseball</em> (<a href="https://scholar.google.com/scholar_lookup?title=Total+Baseball&amp;publication_year=2004&amp;">Google
 Scholar</a>), but it was last published in 2008, so I will instead rely
-on the Lahman R package.</p>
+on the <em>Lahman</em> R package.</p>
 <div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">data</span>(<span class="st">&quot;People&quot;</span>, <span class="st">&quot;Fielding&quot;</span>, <span class="at">package =</span> <span class="st">&quot;Lahman&quot;</span>)</span></code></pre></div>
 <div id="variables" class="section level2">
 <h2>Variables</h2>
@@ -1718,30 +1758,221 @@ game year was greater than their debut year.</p>
 <span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">finalGameYear =</span> <span class="fu">year</span>(finalGame)</span>
 <span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>  )</span>
 <span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>person_year <span class="ot">&lt;-</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>person_year_0 <span class="ot">&lt;-</span></span>
 <span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">expand.grid</span>(</span>
 <span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="at">playerID =</span> <span class="fu">unique</span>(People<span class="sc">$</span>playerID), </span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="at">yr =</span> <span class="fu">c</span>(<span class="dv">1902</span><span class="sc">:</span><span class="dv">2004</span>)</span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="at">yr =</span> <span class="fu">c</span>(<span class="dv">1902</span><span class="sc">:</span><span class="dv">2021</span>)</span>
 <span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">%&gt;%</span></span>
 <span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">inner_join</span>(People, <span class="at">by =</span> <span class="st">&quot;playerID&quot;</span>) <span class="sc">%&gt;%</span></span>
 <span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>  <span class="fu">semi_join</span>(Fielding <span class="sc">%&gt;%</span> <span class="fu">filter</span>(POS <span class="sc">!=</span> <span class="st">&quot;P&quot;</span>), <span class="at">by =</span> <span class="st">&quot;playerID&quot;</span>) <span class="sc">%&gt;%</span></span>
 <span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(</span>
 <span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    debutYear <span class="sc">&gt;=</span> <span class="dv">1902</span>,</span>
-<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>    debutYear <span class="sc">&lt;=</span> yr, <span class="fu">coalesce</span>(deathYear, <span class="dv">9999</span>) <span class="sc">&gt;=</span> yr,</span>
-<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>    debutMonth <span class="sc">&lt;</span> <span class="dv">9</span> <span class="sc">|</span> finalGameYear <span class="sc">&gt;</span> debutYear</span>
-<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>  )</span></code></pre></div>
-<p>I don’t quite match, but this isn’t bad.</p>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>    <span class="co"># all years from debut to death (or censor)</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>    debutYear <span class="sc">&lt;=</span> yr, <span class="fu">coalesce</span>(deathYear, <span class="dv">9999</span>) <span class="sc">&gt;=</span> yr,</span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Not just a September call-up</span></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>    debutMonth <span class="sc">&lt;</span> <span class="dv">9</span> <span class="sc">|</span> finalGameYear <span class="sc">&gt;</span> debutYear</span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>  )</span></code></pre></div>
+<p>I don’t quite match, but this isn’t bad considering I’m using a
+different data source.</p>
 <div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 241,218 person-years? No, 246,402.</span></span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="fu">nrow</span>(person_year)</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>person_year_0 <span class="sc">%&gt;%</span> <span class="fu">filter</span>(yr <span class="sc">&lt;=</span> <span class="dv">2004</span>) <span class="sc">%&gt;%</span> <span class="fu">nrow</span>()</span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="do">## [1] 246402</span></span>
 <span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="co"># 6,772 players? No, 7,002.</span></span>
-<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="fu">n_distinct</span>(person_year<span class="sc">$</span>playerID)</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>person_year_0 <span class="sc">%&gt;%</span> <span class="fu">filter</span>(yr <span class="sc">&lt;=</span> <span class="dv">2004</span>) <span class="sc">%&gt;%</span> <span class="fu">pull</span>(playerID) <span class="sc">%&gt;%</span> <span class="fu">n_distinct</span>()</span>
 <span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="do">## [1] 7002</span></span>
 <span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a><span class="co"># 3,030 deaths? No, 3,191.</span></span>
-<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>person_year <span class="sc">%&gt;%</span> <span class="fu">filter</span>(deathYear <span class="sc">&lt;=</span> <span class="dv">2004</span>) <span class="sc">%&gt;%</span> <span class="fu">pull</span>(playerID) <span class="sc">%&gt;%</span> <span class="fu">n_distinct</span>()</span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>person_year_0 <span class="sc">%&gt;%</span> <span class="fu">filter</span>(deathYear <span class="sc">&lt;=</span> <span class="dv">2004</span>) <span class="sc">%&gt;%</span> <span class="fu">pull</span>(playerID) <span class="sc">%&gt;%</span> <span class="fu">n_distinct</span>()</span>
 <span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a><span class="do">## [1] 3191</span></span></code></pre></div>
+<p>Define other variables.</p>
+<ul>
+<li><code>age</code> = number of years between date of birth and Jan 1
+of year.</li>
+<li><code>age_bin</code> = five-year age groups from 20-24 to 85+.</li>
+<li><code>period_bin</code> = pre-1910, ten-year intervals from 1910 to
+1970, and 1970-2004.</li>
+<li><code>period_bin_2</code> = same, but intervals from 1910 to 1980,
+and 1980-2021 (for additional analysis).</li>
+<li><code>debut_era</code> = Early (1902–1945), Golden (1946–1968), and
+Modern (1969–2004) based on date of debut.</li>
+<li><code>height_fct</code> = &lt;6 feet, &gt;=6 feet.</li>
+<li><code>bmi_fct</code> = Normal, Overwweight, Obese.</li>
+<li><code>career_length_fct</code> = &lt;10 years, 10+ years</li>
+<li><code>throws</code> = Right Handed, Left Handed</li>
+<li><code>status</code> = 0 alive/censored, 1 dead</li>
+</ul>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>person_year <span class="ot">&lt;-</span> person_year_0 <span class="sc">%&gt;%</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    <span class="at">age =</span> <span class="fu">time_length</span>(<span class="fu">interval</span>(birthDate, <span class="fu">ymd</span>(<span class="fu">paste0</span>(yr, <span class="st">&quot;0101&quot;</span>))), <span class="st">&quot;years&quot;</span>),</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">age_bin =</span> <span class="fu">cut</span>(</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>      age, </span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>      <span class="at">breaks =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">20</span> <span class="sc">+</span> <span class="dv">5</span> <span class="sc">*</span> (<span class="dv">1</span><span class="sc">:</span><span class="dv">13</span>), <span class="cn">Inf</span>), </span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>      <span class="at">dig.lab =</span> <span class="dv">4</span>, </span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>      <span class="at">right =</span> <span class="cn">FALSE</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>    ),</span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>    <span class="at">period_bin =</span> <span class="fu">cut</span>(yr, <span class="at">breaks =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">1900</span> <span class="sc">+</span> <span class="dv">10</span> <span class="sc">*</span> (<span class="dv">1</span><span class="sc">:</span><span class="dv">7</span>), <span class="cn">Inf</span>), <span class="at">dig.lab =</span> <span class="dv">4</span>, </span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>                      <span class="at">right =</span> <span class="cn">FALSE</span>),</span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>    <span class="at">period_bin_2 =</span> <span class="fu">cut</span>(yr, <span class="at">breaks =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">1900</span> <span class="sc">+</span> <span class="dv">10</span> <span class="sc">*</span> (<span class="dv">1</span><span class="sc">:</span><span class="dv">8</span>), <span class="dv">9999</span>), <span class="at">dig.lab =</span> <span class="dv">4</span>, </span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>                        <span class="at">right =</span> <span class="cn">FALSE</span>),</span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>    <span class="at">debut_era =</span> <span class="fu">factor</span>(</span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>      <span class="fu">case_when</span>(<span class="fu">between</span>(debutYear, <span class="dv">1902</span>, <span class="dv">1945</span>) <span class="sc">~</span> <span class="st">&quot;Early (1902–1945)&quot;</span>,</span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>                <span class="fu">between</span>(debutYear, <span class="dv">1946</span>, <span class="dv">1968</span>) <span class="sc">~</span> <span class="st">&quot;Golden (1946–1968)&quot;</span>,</span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>                <span class="fu">between</span>(debutYear, <span class="dv">1969</span>, <span class="dv">2004</span>) <span class="sc">~</span> <span class="st">&quot;Modern (1969+)&quot;</span>),</span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>      <span class="at">levels =</span> <span class="fu">c</span>(<span class="st">&quot;Early (1902–1945)&quot;</span>, <span class="st">&quot;Golden (1946–1968)&quot;</span>, <span class="st">&quot;Modern (1969+)&quot;</span>)</span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a>    ),</span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a>    <span class="at">height_fct =</span> <span class="fu">factor</span>(<span class="fu">if_else</span>(</span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a>      height <span class="sc">&gt;=</span> <span class="dv">72</span>, <span class="dv">1</span>, <span class="dv">0</span>), </span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a>      <span class="at">levels =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">1</span>), </span>
+<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a>      <span class="at">labels =</span> <span class="fu">c</span>(<span class="st">&quot;&lt;6 feet&quot;</span>, <span class="st">&quot;&gt;=6 feet&quot;</span>)</span>
+<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a>    ),</span>
+<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a>    <span class="at">bmi =</span> weight <span class="sc">/</span> height<span class="sc">^</span><span class="dv">2</span> <span class="sc">*</span> <span class="dv">703</span>,</span>
+<span id="cb4-26"><a href="#cb4-26" aria-hidden="true" tabindex="-1"></a>    <span class="at">bmi_fct =</span> <span class="fu">case_when</span>(</span>
+<span id="cb4-27"><a href="#cb4-27" aria-hidden="true" tabindex="-1"></a>      bmi <span class="sc">&gt;=</span> <span class="fl">18.5</span> <span class="sc">&amp;</span> bmi <span class="sc">&lt;</span> <span class="fl">25.0</span> <span class="sc">~</span> <span class="st">&quot;Normal (18.5 - &lt;25.0)&quot;</span>,</span>
+<span id="cb4-28"><a href="#cb4-28" aria-hidden="true" tabindex="-1"></a>      bmi <span class="sc">&gt;=</span> <span class="fl">25.0</span> <span class="sc">&amp;</span> bmi <span class="sc">&lt;</span> <span class="fl">30.0</span> <span class="sc">~</span> <span class="st">&quot;Overweight (25.0 – &lt;30.0)&quot;</span>,</span>
+<span id="cb4-29"><a href="#cb4-29" aria-hidden="true" tabindex="-1"></a>      bmi <span class="sc">&gt;=</span> <span class="fl">30.0</span> <span class="sc">&amp;</span> bmi <span class="sc">&lt;</span> <span class="fl">35.0</span> <span class="sc">~</span> <span class="st">&quot;Obese Class I (30.0 – &lt;35.0)&quot;</span></span>
+<span id="cb4-30"><a href="#cb4-30" aria-hidden="true" tabindex="-1"></a>    ),</span>
+<span id="cb4-31"><a href="#cb4-31" aria-hidden="true" tabindex="-1"></a>    <span class="at">bmi_fct =</span> <span class="fu">factor</span>(</span>
+<span id="cb4-32"><a href="#cb4-32" aria-hidden="true" tabindex="-1"></a>      bmi_fct, <span class="at">levels =</span> <span class="fu">c</span>(<span class="st">&quot;Normal (18.5 - &lt;25.0)&quot;</span>,</span>
+<span id="cb4-33"><a href="#cb4-33" aria-hidden="true" tabindex="-1"></a>                          <span class="st">&quot;Overweight (25.0 – &lt;30.0)&quot;</span>,</span>
+<span id="cb4-34"><a href="#cb4-34" aria-hidden="true" tabindex="-1"></a>                          <span class="st">&quot;Obese Class I (30.0 – &lt;35.0)&quot;</span>)</span>
+<span id="cb4-35"><a href="#cb4-35" aria-hidden="true" tabindex="-1"></a>    ),</span>
+<span id="cb4-36"><a href="#cb4-36" aria-hidden="true" tabindex="-1"></a>    <span class="at">career_length =</span> <span class="fu">time_length</span>(<span class="fu">interval</span>(debut, finalGame), <span class="st">&quot;years&quot;</span>),</span>
+<span id="cb4-37"><a href="#cb4-37" aria-hidden="true" tabindex="-1"></a>    <span class="at">career_length_fct =</span> <span class="fu">factor</span>(</span>
+<span id="cb4-38"><a href="#cb4-38" aria-hidden="true" tabindex="-1"></a>      <span class="fu">if_else</span>(career_length <span class="sc">&lt;</span> <span class="dv">10</span>, <span class="st">&quot;&lt;10 years&quot;</span>, <span class="st">&quot;10+ years&quot;</span>),</span>
+<span id="cb4-39"><a href="#cb4-39" aria-hidden="true" tabindex="-1"></a>      <span class="at">levels =</span> <span class="fu">c</span>(<span class="st">&quot;&lt;10 years&quot;</span>, <span class="st">&quot;10+ years&quot;</span>)</span>
+<span id="cb4-40"><a href="#cb4-40" aria-hidden="true" tabindex="-1"></a>    ),</span>
+<span id="cb4-41"><a href="#cb4-41" aria-hidden="true" tabindex="-1"></a>    <span class="at">throws =</span> <span class="fu">factor</span>(</span>
+<span id="cb4-42"><a href="#cb4-42" aria-hidden="true" tabindex="-1"></a>      throws, </span>
+<span id="cb4-43"><a href="#cb4-43" aria-hidden="true" tabindex="-1"></a>      <span class="at">levels =</span> <span class="fu">c</span>(<span class="st">&quot;R&quot;</span>, <span class="st">&quot;L&quot;</span>), </span>
+<span id="cb4-44"><a href="#cb4-44" aria-hidden="true" tabindex="-1"></a>      <span class="at">labels =</span> <span class="fu">c</span>(<span class="st">&quot;Right Handed&quot;</span>, <span class="st">&quot;Left Handed&quot;</span>)</span>
+<span id="cb4-45"><a href="#cb4-45" aria-hidden="true" tabindex="-1"></a>    ),</span>
+<span id="cb4-46"><a href="#cb4-46" aria-hidden="true" tabindex="-1"></a>    <span class="at">status =</span> <span class="fu">if_else</span>(deathYear <span class="sc">==</span> yr, 1L, 0L)</span>
+<span id="cb4-47"><a href="#cb4-47" aria-hidden="true" tabindex="-1"></a>  )</span></code></pre></div>
+<p>Table 1 presents the descriptive statistics of the covariates based
+on the pooled person-years.</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>person_year <span class="sc">%&gt;%</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(yr <span class="sc">&lt;=</span> <span class="dv">2004</span>) <span class="sc">%&gt;%</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">tbl_summary</span>(</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">label =</span> <span class="fu">list</span>(</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>      age_bin <span class="sc">~</span> <span class="st">&quot;Age Group&quot;</span>,</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>      period_bin <span class="sc">~</span> <span class="st">&quot;Time Period&quot;</span>,</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>      debut_era <span class="sc">~</span> <span class="st">&quot;Cohort&quot;</span>,</span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>      bmi_fct <span class="sc">~</span> <span class="st">&quot;Body Mass Index&quot;</span>,</span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>      height_fct <span class="sc">~</span> <span class="st">&quot;Height&quot;</span>,</span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>      throws <span class="sc">~</span> <span class="st">&quot;Handedness&quot;</span>,</span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>      <span class="at">career_length_fct =</span> <span class="st">&quot;Seasons Played&quot;</span>,</span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>      <span class="at">status =</span> <span class="st">&quot;Died&quot;</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>    ),</span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>    <span class="at">include =</span> <span class="fu">c</span>(age_bin, period_bin, debut_era, height_fct, bmi_fct, </span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>                career_length_fct, throws, status)</span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">%&gt;%</span></span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>  gtsummary<span class="sc">::</span><span class="fu">as_flex_table</span>() <span class="sc">%&gt;%</span></span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>  flextable<span class="sc">::</span><span class="fu">set_caption</span>(<span class="st">&quot;Table 1. Percentage of selected characteristics, MLB players, 1902-2004.&quot;</span>)</span></code></pre></div>
+<template id="c5d6cf9b-5806-40ec-b5e3-bd7217a66b6c"><style>
+.tabwid table{
+  border-spacing:0px !important;
+  border-collapse:collapse;
+  line-height:1;
+  margin-left:auto;
+  margin-right:auto;
+  border-width: 0;
+  display: table;
+  margin-top: 1.275em;
+  margin-bottom: 1.275em;
+  border-color: transparent;
+}
+.tabwid_left table{
+  margin-left:0;
+}
+.tabwid_right table{
+  margin-right:0;
+}
+.tabwid td {
+    padding: 0;
+}
+.tabwid a {
+  text-decoration: none;
+}
+.tabwid thead {
+    background-color: transparent;
+}
+.tabwid tfoot {
+    background-color: transparent;
+}
+.tabwid table tr {
+background-color: transparent;
+}
+</style><div class="tabwid"><style>.cl-25ccf8ca{}.cl-25c0d68a{font-family:'Arial';font-size:11pt;font-weight:normal;font-style:normal;text-decoration:none;color:rgba(0, 0, 0, 1.00);background-color:transparent;}.cl-25c0d68b{font-family:'Arial';font-size:6.6pt;font-weight:normal;font-style:normal;text-decoration:none;color:rgba(0, 0, 0, 1.00);background-color:transparent;position: relative;bottom:3.3pt;}.cl-25c0d68c{margin:0;text-align:left;border-bottom: 0 solid rgba(0, 0, 0, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);padding-bottom:2pt;padding-top:2pt;padding-left:5pt;padding-right:5pt;line-height: 1;background-color:transparent;}.cl-25c0d68d{margin:0;text-align:center;border-bottom: 0 solid rgba(0, 0, 0, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);padding-bottom:2pt;padding-top:2pt;padding-left:5pt;padding-right:5pt;line-height: 1;background-color:transparent;}.cl-25c0d68e{margin:0;text-align:left;border-bottom: 0 solid rgba(0, 0, 0, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);padding-bottom:5pt;padding-top:5pt;padding-left:5pt;padding-right:5pt;line-height: 1;background-color:transparent;}.cl-25c0d68f{margin:0;text-align:center;border-bottom: 0 solid rgba(0, 0, 0, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);padding-bottom:5pt;padding-top:5pt;padding-left:5pt;padding-right:5pt;line-height: 1;background-color:transparent;}.cl-25c0d690{margin:0;text-align:left;border-bottom: 0 solid rgba(0, 0, 0, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);padding-bottom:5pt;padding-top:5pt;padding-left:15pt;padding-right:5pt;line-height: 1;background-color:transparent;}.cl-25c0d691{margin:0;text-align:left;border-bottom: 0 solid rgba(0, 0, 0, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);padding-bottom:5pt;padding-top:5pt;padding-left:5pt;padding-right:5pt;line-height: 1;background-color:transparent;}.cl-25c1637a{width:92.7pt;background-color:transparent;vertical-align: middle;border-bottom: 0 solid rgba(0, 0, 0, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-25c1637b{width:174.8pt;background-color:transparent;vertical-align: top;border-bottom: 0 solid rgba(0, 0, 0, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-25c1637c{width:174.8pt;background-color:transparent;vertical-align: top;border-bottom: 0 solid rgba(0, 0, 0, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-25c1637d{width:92.7pt;background-color:transparent;vertical-align: middle;border-bottom: 0 solid rgba(0, 0, 0, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-25c1637e{width:174.8pt;background-color:transparent;vertical-align: top;border-bottom: 0 solid rgba(0, 0, 0, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-25c1637f{width:92.7pt;background-color:transparent;vertical-align: middle;border-bottom: 0 solid rgba(0, 0, 0, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-25c16380{width:174.8pt;background-color:transparent;vertical-align: top;border-bottom: 0 solid rgba(0, 0, 0, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-25c16381{width:92.7pt;background-color:transparent;vertical-align: middle;border-bottom: 0 solid rgba(0, 0, 0, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-25c16382{width:174.8pt;background-color:transparent;vertical-align: top;border-bottom: 0 solid rgba(0, 0, 0, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-25c16383{width:92.7pt;background-color:transparent;vertical-align: middle;border-bottom: 0 solid rgba(0, 0, 0, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-25c16384{width:92.7pt;background-color:transparent;vertical-align: middle;border-bottom: 0 solid rgba(0, 0, 0, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-25c18a9e{width:174.8pt;background-color:transparent;vertical-align: top;border-bottom: 0 solid rgba(0, 0, 0, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-25c18a9f{width:92.7pt;background-color:transparent;vertical-align: middle;border-bottom: 0 solid rgba(0, 0, 0, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-25c18aa0{width:174.8pt;background-color:transparent;vertical-align: top;border-bottom: 0 solid rgba(0, 0, 0, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-25c18aa1{width:92.7pt;background-color:transparent;vertical-align: middle;border-bottom: 0 solid rgba(0, 0, 0, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-25c18aa2{width:174.8pt;background-color:transparent;vertical-align: top;border-bottom: 0 solid rgba(0, 0, 0, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-25c18aa3{width:92.7pt;background-color:transparent;vertical-align: middle;border-bottom: 1pt solid rgba(0, 0, 0, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-25c18aa4{width:174.8pt;background-color:transparent;vertical-align: top;border-bottom: 1pt solid rgba(0, 0, 0, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-25c18aa5{width:92.7pt;background-color:transparent;vertical-align: middle;border-bottom: 0 solid rgba(255, 255, 255, 0.00);border-top: 0 solid rgba(255, 255, 255, 0.00);border-left: 0 solid rgba(255, 255, 255, 0.00);border-right: 0 solid rgba(255, 255, 255, 0.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-25c18aa6{width:174.8pt;background-color:transparent;vertical-align: middle;border-bottom: 0 solid rgba(255, 255, 255, 0.00);border-top: 0 solid rgba(255, 255, 255, 0.00);border-left: 0 solid rgba(255, 255, 255, 0.00);border-right: 0 solid rgba(255, 255, 255, 0.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-25c18aa7{width:174.8pt;background-color:transparent;vertical-align: middle;border-bottom: 1pt solid rgba(0, 0, 0, 1.00);border-top: 1pt solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-25c18aa8{width:92.7pt;background-color:transparent;vertical-align: middle;border-bottom: 1pt solid rgba(0, 0, 0, 1.00);border-top: 1pt solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}</style><table class="cl-25ccf8ca"><caption class="Table Caption">Table 1. Percentage of selected characteristics, MLB players, 1902-2004.</caption><thead><tr style="overflow-wrap:break-word;"><td class="cl-25c18aa7"><p class="cl-25c0d68c"><span class="cl-25c0d68a">Characteristic</span></p></td><td class="cl-25c18aa8"><p class="cl-25c0d68d"><span class="cl-25c0d68a">N = 246,402</span><span class="cl-25c0d68b">1</span></p></td></tr></thead><tbody><tr style="overflow-wrap:break-word;"><td class="cl-25c1637b"><p class="cl-25c0d68e"><span class="cl-25c0d68a">Age Group</span></p></td><td class="cl-25c1637a"><p class="cl-25c0d68f"><span class="cl-25c0d68a"></span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c1637b"><p class="cl-25c0d690"><span class="cl-25c0d68a">[0,25)</span></p></td><td class="cl-25c1637a"><p class="cl-25c0d68f"><span class="cl-25c0d68a">15,669 (6.4%)</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c1637b"><p class="cl-25c0d690"><span class="cl-25c0d68a">[25,30)</span></p></td><td class="cl-25c1637a"><p class="cl-25c0d68f"><span class="cl-25c0d68a">30,380 (12%)</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c1637b"><p class="cl-25c0d690"><span class="cl-25c0d68a">[30,35)</span></p></td><td class="cl-25c1637a"><p class="cl-25c0d68f"><span class="cl-25c0d68a">30,866 (13%)</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c1637b"><p class="cl-25c0d690"><span class="cl-25c0d68a">[35,40)</span></p></td><td class="cl-25c1637a"><p class="cl-25c0d68f"><span class="cl-25c0d68a">28,751 (12%)</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c1637b"><p class="cl-25c0d690"><span class="cl-25c0d68a">[40,45)</span></p></td><td class="cl-25c1637a"><p class="cl-25c0d68f"><span class="cl-25c0d68a">26,366 (11%)</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c1637b"><p class="cl-25c0d690"><span class="cl-25c0d68a">[45,50)</span></p></td><td class="cl-25c1637a"><p class="cl-25c0d68f"><span class="cl-25c0d68a">23,888 (9.7%)</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c1637b"><p class="cl-25c0d690"><span class="cl-25c0d68a">[50,55)</span></p></td><td class="cl-25c1637a"><p class="cl-25c0d68f"><span class="cl-25c0d68a">21,209 (8.6%)</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c1637b"><p class="cl-25c0d690"><span class="cl-25c0d68a">[55,60)</span></p></td><td class="cl-25c1637a"><p class="cl-25c0d68f"><span class="cl-25c0d68a">18,482 (7.5%)</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c1637b"><p class="cl-25c0d690"><span class="cl-25c0d68a">[60,65)</span></p></td><td class="cl-25c1637a"><p class="cl-25c0d68f"><span class="cl-25c0d68a">15,673 (6.4%)</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c1637b"><p class="cl-25c0d690"><span class="cl-25c0d68a">[65,70)</span></p></td><td class="cl-25c1637a"><p class="cl-25c0d68f"><span class="cl-25c0d68a">12,697 (5.2%)</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c1637b"><p class="cl-25c0d690"><span class="cl-25c0d68a">[70,75)</span></p></td><td class="cl-25c1637a"><p class="cl-25c0d68f"><span class="cl-25c0d68a">9,649 (3.9%)</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c1637b"><p class="cl-25c0d690"><span class="cl-25c0d68a">[75,80)</span></p></td><td class="cl-25c1637a"><p class="cl-25c0d68f"><span class="cl-25c0d68a">6,672 (2.7%)</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c1637b"><p class="cl-25c0d690"><span class="cl-25c0d68a">[80,85)</span></p></td><td class="cl-25c1637a"><p class="cl-25c0d68f"><span class="cl-25c0d68a">3,806 (1.5%)</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c1637b"><p class="cl-25c0d690"><span class="cl-25c0d68a">[85,Inf)</span></p></td><td class="cl-25c1637a"><p class="cl-25c0d68f"><span class="cl-25c0d68a">2,181 (0.9%)</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c1637c"><p class="cl-25c0d690"><span class="cl-25c0d68a">Unknown</span></p></td><td class="cl-25c1637d"><p class="cl-25c0d68f"><span class="cl-25c0d68a">113</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c1637e"><p class="cl-25c0d68e"><span class="cl-25c0d68a">Time Period</span></p></td><td class="cl-25c1637f"><p class="cl-25c0d68f"><span class="cl-25c0d68a"></span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c1637b"><p class="cl-25c0d690"><span class="cl-25c0d68a">[0,1910)</span></p></td><td class="cl-25c1637a"><p class="cl-25c0d68f"><span class="cl-25c0d68a">2,381 (1.0%)</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c1637b"><p class="cl-25c0d690"><span class="cl-25c0d68a">[1910,1920)</span></p></td><td class="cl-25c1637a"><p class="cl-25c0d68f"><span class="cl-25c0d68a">10,470 (4.2%)</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c1637b"><p class="cl-25c0d690"><span class="cl-25c0d68a">[1920,1930)</span></p></td><td class="cl-25c1637a"><p class="cl-25c0d68f"><span class="cl-25c0d68a">16,435 (6.7%)</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c1637b"><p class="cl-25c0d690"><span class="cl-25c0d68a">[1930,1940)</span></p></td><td class="cl-25c1637a"><p class="cl-25c0d68f"><span class="cl-25c0d68a">21,060 (8.5%)</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c1637b"><p class="cl-25c0d690"><span class="cl-25c0d68a">[1940,1950)</span></p></td><td class="cl-25c1637a"><p class="cl-25c0d68f"><span class="cl-25c0d68a">25,202 (10%)</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c1637b"><p class="cl-25c0d690"><span class="cl-25c0d68a">[1950,1960)</span></p></td><td class="cl-25c1637a"><p class="cl-25c0d68f"><span class="cl-25c0d68a">27,591 (11%)</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c1637b"><p class="cl-25c0d690"><span class="cl-25c0d68a">[1960,1970)</span></p></td><td class="cl-25c1637a"><p class="cl-25c0d68f"><span class="cl-25c0d68a">28,559 (12%)</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c1637b"><p class="cl-25c0d690"><span class="cl-25c0d68a">[1970,Inf)</span></p></td><td class="cl-25c1637a"><p class="cl-25c0d68f"><span class="cl-25c0d68a">114,704 (47%)</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c16380"><p class="cl-25c0d68e"><span class="cl-25c0d68a">Cohort</span></p></td><td class="cl-25c16381"><p class="cl-25c0d68f"><span class="cl-25c0d68a"></span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c1637b"><p class="cl-25c0d690"><span class="cl-25c0d68a">Early (1902–1945)</span></p></td><td class="cl-25c1637a"><p class="cl-25c0d68f"><span class="cl-25c0d68a">140,011 (57%)</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c1637b"><p class="cl-25c0d690"><span class="cl-25c0d68a">Golden (1946–1968)</span></p></td><td class="cl-25c1637a"><p class="cl-25c0d68f"><span class="cl-25c0d68a">57,414 (23%)</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c1637b"><p class="cl-25c0d690"><span class="cl-25c0d68a">Modern (1969+)</span></p></td><td class="cl-25c1637a"><p class="cl-25c0d68f"><span class="cl-25c0d68a">48,977 (20%)</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c16382"><p class="cl-25c0d68e"><span class="cl-25c0d68a">Height</span></p></td><td class="cl-25c16383"><p class="cl-25c0d68f"><span class="cl-25c0d68a"></span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c1637b"><p class="cl-25c0d690"><span class="cl-25c0d68a">&lt;6 feet</span></p></td><td class="cl-25c1637a"><p class="cl-25c0d68f"><span class="cl-25c0d68a">132,352 (54%)</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c1637b"><p class="cl-25c0d690"><span class="cl-25c0d68a">&gt;=6 feet</span></p></td><td class="cl-25c1637a"><p class="cl-25c0d68f"><span class="cl-25c0d68a">113,095 (46%)</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c18a9e"><p class="cl-25c0d690"><span class="cl-25c0d68a">Unknown</span></p></td><td class="cl-25c16384"><p class="cl-25c0d68f"><span class="cl-25c0d68a">955</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c16382"><p class="cl-25c0d68e"><span class="cl-25c0d68a">Body Mass Index</span></p></td><td class="cl-25c16383"><p class="cl-25c0d68f"><span class="cl-25c0d68a"></span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c1637b"><p class="cl-25c0d690"><span class="cl-25c0d68a">Normal (18.5 - &lt;25.0)</span></p></td><td class="cl-25c1637a"><p class="cl-25c0d68f"><span class="cl-25c0d68a">143,676 (59%)</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c18aa0"><p class="cl-25c0d690"><span class="cl-25c0d68a">Overweight (25.0 – &lt;30.0)</span></p></td><td class="cl-25c18a9f"><p class="cl-25c0d68f"><span class="cl-25c0d68a">99,368 (41%)</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c18aa0"><p class="cl-25c0d690"><span class="cl-25c0d68a">Obese Class I (30.0 – &lt;35.0)</span></p></td><td class="cl-25c18a9f"><p class="cl-25c0d68f"><span class="cl-25c0d68a">737 (0.3%)</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c18aa2"><p class="cl-25c0d690"><span class="cl-25c0d68a">Unknown</span></p></td><td class="cl-25c18aa1"><p class="cl-25c0d68f"><span class="cl-25c0d68a">2,621</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c1637b"><p class="cl-25c0d68e"><span class="cl-25c0d68a">Seasons Played</span></p></td><td class="cl-25c1637a"><p class="cl-25c0d68f"><span class="cl-25c0d68a"></span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c1637b"><p class="cl-25c0d690"><span class="cl-25c0d68a">&lt;10 years</span></p></td><td class="cl-25c1637a"><p class="cl-25c0d68f"><span class="cl-25c0d68a">181,450 (74%)</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c1637b"><p class="cl-25c0d690"><span class="cl-25c0d68a">10+ years</span></p></td><td class="cl-25c1637a"><p class="cl-25c0d68f"><span class="cl-25c0d68a">64,952 (26%)</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c1637e"><p class="cl-25c0d68e"><span class="cl-25c0d68a">Handedness</span></p></td><td class="cl-25c1637f"><p class="cl-25c0d68f"><span class="cl-25c0d68a"></span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c1637b"><p class="cl-25c0d690"><span class="cl-25c0d68a">Right Handed</span></p></td><td class="cl-25c1637a"><p class="cl-25c0d68f"><span class="cl-25c0d68a">211,171 (86%)</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c1637b"><p class="cl-25c0d690"><span class="cl-25c0d68a">Left Handed</span></p></td><td class="cl-25c1637a"><p class="cl-25c0d68f"><span class="cl-25c0d68a">34,407 (14%)</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c18a9e"><p class="cl-25c0d690"><span class="cl-25c0d68a">Unknown</span></p></td><td class="cl-25c16384"><p class="cl-25c0d68f"><span class="cl-25c0d68a">824</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c1637b"><p class="cl-25c0d68e"><span class="cl-25c0d68a">Died</span></p></td><td class="cl-25c1637a"><p class="cl-25c0d68f"><span class="cl-25c0d68a">3,191 (1.7%)</span></p></td></tr><tr style="overflow-wrap:break-word;"><td class="cl-25c18aa4"><p class="cl-25c0d690"><span class="cl-25c0d68a">Unknown</span></p></td><td class="cl-25c18aa3"><p class="cl-25c0d68f"><span class="cl-25c0d68a">62,403</span></p></td></tr></tbody><tfoot><tr style="overflow-wrap:break-word;"><td colspan="2" class="cl-25c18aa6"><p class="cl-25c0d691"><span class="cl-25c0d68b">1</span><span class="cl-25c0d68a">n (%)</span></p></td></tr></tfoot></table></div></template>
+<div class="flextable-shadow-host" id="84e168f8-c33a-43f9-a2bb-e377f480835a"></div>
+<script>
+var dest = document.getElementById("84e168f8-c33a-43f9-a2bb-e377f480835a");
+var template = document.getElementById("c5d6cf9b-5806-40ec-b5e3-bd7217a66b6c");
+var caption = template.content.querySelector("caption");
+if(caption) {
+  caption.style.cssText = "display:block;text-align:center;";
+  var newcapt = document.createElement("p");
+  newcapt.appendChild(caption)
+  dest.parentNode.insertBefore(newcapt, dest.previousSibling);
+}
+var fantome = dest.attachShadow({mode: 'open'});
+var templateContent = template.content;
+fantome.appendChild(templateContent);
+</script>
+
+<p>Consistent with the original study, 41 percent of players-years are
+classified as overweight and .3% are obese (.28% in original study). 54
+percent are less than six feet tall (54.81 in original study), and 86
+percent are right-handed. 26 percent of players played 10 years or more
+(24 percent in original study).</p>
+</div>
+<div id="method" class="section level2">
+<h2>Method</h2>
+<p>The authors use logistic regression to estimate a discrete time
+hazards model for risk of death between the debut date and the end of
+the follow-up period. They explain that they start with debut date
+rather than birth date because by definition all players have survived
+until their debut. The advantage of using a discrete time hazards model
+over a Cox proportional hazards model is that you can calculate life
+tables with covariates.</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>mdl <span class="ot">&lt;-</span> <span class="fu">glm</span>(status <span class="sc">~</span> age_bin, <span class="at">data =</span> person_year, <span class="at">family =</span> <span class="fu">binomial</span>(<span class="at">link =</span> <span class="st">&quot;cloglog&quot;</span>))</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(mdl)</span></code></pre></div>
+<pre><code>## 
+## Call:
+## glm(formula = status ~ age_bin, family = binomial(link = &quot;cloglog&quot;), 
+##     data = person_year)
+## 
+## Deviance Residuals: 
+##     Min       1Q   Median       3Q      Max  
+## -0.6359  -0.2223  -0.1255  -0.0693   3.5744  
+## 
+## Coefficients:
+##                 Estimate Std. Error z value Pr(&gt;|z|)    
+## (Intercept)      -6.3872     0.2577 -24.786  &lt; 2e-16 ***
+## age_bin[25,30)    0.3547     0.3003   1.181 0.237603    
+## age_bin[30,35)    0.3003     0.2985   1.006 0.314473    
+## age_bin[35,40)    0.6131     0.2882   2.127 0.033414 *  
+## age_bin[40,45)    0.9792     0.2796   3.502 0.000462 ***
+## age_bin[45,50)    1.5427     0.2707   5.698 1.21e-08 ***
+## age_bin[50,55)    2.0169     0.2663   7.573 3.65e-14 ***
+## age_bin[55,60)    2.2373     0.2651   8.438  &lt; 2e-16 ***
+## age_bin[60,65)    2.6864     0.2630  10.216  &lt; 2e-16 ***
+## age_bin[65,70)    3.0683     0.2619  11.716  &lt; 2e-16 ***
+## age_bin[70,75)    3.4093     0.2614  13.043  &lt; 2e-16 ***
+## age_bin[75,80)    3.7467     0.2613  14.340  &lt; 2e-16 ***
+## age_bin[80,85)    4.2214     0.2612  16.160  &lt; 2e-16 ***
+## age_bin[85,Inf)   4.7886     0.2605  18.381  &lt; 2e-16 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## (Dispersion parameter for binomial family taken to be 1)
+## 
+##     Null deviance: 38731  on 191608  degrees of freedom
+## Residual deviance: 32523  on 191595  degrees of freedom
+##   (128181 observations deleted due to missingness)
+## AIC: 32551
+## 
+## Number of Fisher Scoring iterations: 8</code></pre>
 </div>
 </div>
 <div id="references" class="section level1">

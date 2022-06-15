@@ -18,7 +18,13 @@ knit: (function(inputFile, encoding) {
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-Saint Onge et at ([2008](#SaintOnge2008)) use professional baseball player data to evaluate the role of anthropomorphic measures (height, body mass, handedness) and performance measures (career length, total player rating) on longevity. Using a discrete time hazards model, the authors find MLB players can expect almost five additional years of life. This workbook reproduces the results from the same source data and methods.
+Saint Onge et at ([2008](#SaintOnge2008)) use professional baseball player data to evaluate the role of anthropomorphic measures (height, body mass, handedness) and performance measures (career length, total player rating) on longevity. Using a discrete time hazards model, the authors find:
+
+* MLB players can expect almost five additional years of life. 
+* Height, weight, handedness, and player ratings are not associated with the risk of death, and
+* Career length is inversely associated with the risk of death
+
+This workbook reproduces the results from the same source data and methods.
 
 ```{r include=FALSE}
 library(Lahman)
@@ -30,7 +36,7 @@ library(gtsummary)
 
 # Data and Methods
 
-The authors used data from the electron version of *Total Baseball* ([Google Scholar](https://scholar.google.com/scholar_lookup?title=Total+Baseball&publication_year=2004&)), but it was last published in 2008, so I will instead rely on the Lahman R package.
+The authors used data from the electronic version of *Total Baseball* ([Google Scholar](https://scholar.google.com/scholar_lookup?title=Total+Baseball&publication_year=2004&)), but it was last published in 2008, so I will instead rely on the *Lahman* R package.
 
 ```{r}
 data("People", "Fielding", package = "Lahman")
@@ -51,13 +57,15 @@ People <- People %>%
 person_year_0 <-
   expand.grid(
     playerID = unique(People$playerID), 
-    yr = c(1902:2004)
+    yr = c(1902:2021)
   ) %>%
   inner_join(People, by = "playerID") %>%
   semi_join(Fielding %>% filter(POS != "P"), by = "playerID") %>%
   filter(
     debutYear >= 1902,
+    # all years from debut to death (or censor)
     debutYear <= yr, coalesce(deathYear, 9999) >= yr,
+    # Not just a September call-up
     debutMonth < 9 | finalGameYear > debutYear
   )
 ```
@@ -66,10 +74,10 @@ I don't quite match, but this isn't bad considering I'm using a different data s
 
 ```{r collapse=TRUE}
 # 241,218 person-years? No, 246,402.
-nrow(person_year_0)
+person_year_0 %>% filter(yr <= 2004) %>% nrow()
 
 # 6,772 players? No, 7,002.
-n_distinct(person_year_0$playerID)
+person_year_0 %>% filter(yr <= 2004) %>% pull(playerID) %>% n_distinct()
 
 # 3,030 deaths? No, 3,191.
 person_year_0 %>% filter(deathYear <= 2004) %>% pull(playerID) %>% n_distinct()
@@ -77,40 +85,57 @@ person_year_0 %>% filter(deathYear <= 2004) %>% pull(playerID) %>% n_distinct()
 
 Define other variables.
 
+* `age` = number of years between date of birth and Jan 1 of year.
+* `age_bin` = five-year age groups from 20-24 to 85+.
+* `period_bin` = pre-1910, ten-year intervals from 1910 to 1970, and 1970-2004.
+* `period_bin_2` = same, but intervals from 1910 to 1980, and 1980-2021 (for additional analysis).
+* `debut_era` = Early (1902–1945), Golden (1946–1968), and Modern (1969–2004) based on date of debut.
+* `height_fct` = <6 feet, >=6 feet.
+* `bmi_fct` = Normal, Overwweight, Obese.
+* `career_length_fct` = <10 years, 10+ years
+* `throws` = Right Handed, Left Handed
+* `status` = 0 alive/censored, 1 dead
+
 ```{r}
 person_year <- person_year_0 %>%
   mutate(
-    era = factor(
-      case_when(between(debutYear, 1902, 1945) ~ "Early",
-                between(debutYear, 1946, 1968) ~ "Golden",
-                between(debutYear, 1969, 2004) ~ "Modern"),
-      levels = c("Early", "Golden", "Modern")
-    ),
     age = time_length(interval(birthDate, ymd(paste0(yr, "0101"))), "years"),
     age_bin = cut(
       age, 
-      breaks = c(15, 19 + 5 * (1:13), 1000)
+      breaks = c(0, 20 + 5 * (1:13), Inf), 
+      dig.lab = 4, 
+      right = FALSE
     ),
-    height_bin = factor(if_else(
+    period_bin = cut(yr, breaks = c(0, 1900 + 10 * (1:7), Inf), dig.lab = 4, 
+                      right = FALSE),
+    period_bin_2 = cut(yr, breaks = c(0, 1900 + 10 * (1:8), 9999), dig.lab = 4, 
+                        right = FALSE),
+    debut_era = factor(
+      case_when(between(debutYear, 1902, 1945) ~ "Early (1902–1945)",
+                between(debutYear, 1946, 1968) ~ "Golden (1946–1968)",
+                between(debutYear, 1969, 2004) ~ "Modern (1969+)"),
+      levels = c("Early (1902–1945)", "Golden (1946–1968)", "Modern (1969+)")
+    ),
+    height_fct = factor(if_else(
       height >= 72, 1, 0), 
       levels = c(0, 1), 
       labels = c("<6 feet", ">=6 feet")
     ),
     bmi = weight / height^2 * 703,
-    bmi_bin = case_when(
+    bmi_fct = case_when(
       bmi >= 18.5 & bmi < 25.0 ~ "Normal (18.5 - <25.0)",
       bmi >= 25.0 & bmi < 30.0 ~ "Overweight (25.0 – <30.0)",
       bmi >= 30.0 & bmi < 35.0 ~ "Obese Class I (30.0 – <35.0)"
     ),
-    bmi_bin = factor(
-      bmi_bin, levels = c("Normal (18.5 - <25.0)",
+    bmi_fct = factor(
+      bmi_fct, levels = c("Normal (18.5 - <25.0)",
                           "Overweight (25.0 – <30.0)",
                           "Obese Class I (30.0 – <35.0)")
     ),
     career_length = time_length(interval(debut, finalGame), "years"),
-    career_length_bin = factor(
-      if_else(career_length < 10, "< 10 years", "10+ years"),
-      levels = c("< 10 years", "10+ years")
+    career_length_fct = factor(
+      if_else(career_length < 10, "<10 years", "10+ years"),
+      levels = c("<10 years", "10+ years")
     ),
     throws = factor(
       throws, 
@@ -125,28 +150,54 @@ Table 1 presents the descriptive statistics of the covariates based on the poole
 
 ```{r}
 person_year %>%
+  filter(yr <= 2004) %>%
   tbl_summary(
     label = list(
       age_bin ~ "Age Group",
-      era ~ "Cohort",
-      bmi_bin ~ "Body Mass Index",
-      height_bin ~ "Height",
+      period_bin ~ "Time Period",
+      debut_era ~ "Cohort",
+      bmi_fct ~ "Body Mass Index",
+      height_fct ~ "Height",
       throws ~ "Handedness",
-      career_length_bin = "Seasons Played",
+      career_length_fct = "Seasons Played",
       status = "Died"
     ),
-    include = c(status, age_bin, era, bmi_bin, height_bin, throws, 
-                career_length_bin)
-  )
+    include = c(age_bin, period_bin, debut_era, height_fct, bmi_fct, 
+                career_length_fct, throws, status)
+  ) %>%
+  gtsummary::as_flex_table() %>%
+  flextable::set_caption("Table 1. Percentage of selected characteristics, MLB players, 1902-2004.")
 ```
+
+Consistent with the original study, 41 percent of players-years are classified as overweight and .3% are obese (.28% in original study). 54 percent are less than six feet tall (54.81 in original study), and 86 percent are right-handed. 26 percent of players played 10 years or more (24 percent in original study).
 
 ## Method
 
 The authors use logistic regression to estimate a discrete time hazards model for risk of death between the debut date and the end of the follow-up period. They explain that they start with debut date rather than birth date because by definition all players have survived until their debut. The advantage of using a discrete time hazards model over a Cox proportional hazards model is that you can calculate life tables with covariates.
 
 ```{r}
-mdl <- glm(status ~ age_bin, data = person_year, family = binomial(link = "cloglog"))
-summary(mdl)
+person_year_2004 <- person_year %>% filter(yr <= 2004)
+mdl_1 <- glm(status ~ age_bin, 
+             data = person_year_2004, family = binomial(link = "cloglog"))
+mdl_2 <- glm(status ~ age_bin + period_bin, 
+             data = person_year_2004, family = binomial(link = "cloglog"))
+mdl_3 <- glm(status ~ age_bin + period_bin + debut_era, 
+             data = person_year_2004, family = binomial(link = "cloglog"))
+mdl_4 <- glm(status ~ age_bin + period_bin + debut_era + bmi_fct, 
+             data = person_year_2004, family = binomial(link = "cloglog"))
+mdl_5 <- glm(status ~ age_bin + period_bin + debut_era + bmi_fct + height_fct, 
+             data = person_year_2004, family = binomial(link = "cloglog"))
+mdl_6 <- glm(status ~ age_bin + period_bin + debut_era + bmi_fct + height_fct +
+               throws, 
+             data = person_year_2004, family = binomial(link = "cloglog"))
+# not mdl_7 or mdl_8 because I do not have player ratings.
+mdl_9 <- glm(status ~ age_bin + period_bin + debut_era + bmi_fct + height_fct +
+               throws + career_length_fct, 
+             data = person_year_2004, family = binomial(link = "cloglog"))
+```
+
+```{r}
+mdl_9 %>% gtsummary::tbl_regression()
 ```
 
 
