@@ -31,6 +31,7 @@ library(Lahman)
 library(tidyverse)
 library(lubridate)
 library(scales)
+library(broom)
 library(gtsummary)
 ```
 
@@ -47,19 +48,26 @@ data("People", "Fielding", package = "Lahman")
 The authors created a person-year data set, with one row per player per year from debut to year of death (or censor). The data set included 241,218 person-years for 1902 - 2004 (103 years) and 6,772 players. Players were included in the data set if 1) they debuted between 1902 and 2004, 2) they were a position player (pitchers excluded), and 3) there were more than just a September call-up. Regarding condition 3, that means either the debut month number was less than 9, or their final game year was greater than their debut year.
 
 ```{r}
-People <- People %>%
+person <- People %>%
   mutate(
     debutYear = year(debut),
     debutMonth = month(debut),
-    finalGameYear = year(finalGame)
+    finalGameYear = year(finalGame),
+    age_at_death = time_length(interval(birthDate, deathDate), "years"),
+    age_at_death_bin = cut(
+      age_at_death, 
+      breaks = c(0, 20 + 5 * (1:13), Inf), 
+      dig.lab = 4, 
+      right = FALSE
+    )
   )
 
 person_year_0 <-
   expand.grid(
-    playerID = unique(People$playerID), 
+    playerID = unique(person$playerID), 
     yr = c(1902:2021)
   ) %>%
-  inner_join(People, by = "playerID") %>%
+  inner_join(person, by = "playerID") %>%
   semi_join(Fielding %>% filter(POS != "P"), by = "playerID") %>%
   filter(
     debutYear >= 1902,
@@ -183,24 +191,111 @@ mdl_2 <- glm(status ~ age_bin + period_bin,
              data = person_year_2004, family = binomial(link = "cloglog"))
 mdl_3 <- glm(status ~ age_bin + period_bin + debut_era, 
              data = person_year_2004, family = binomial(link = "cloglog"))
-mdl_4 <- glm(status ~ age_bin + period_bin + debut_era + bmi_fct, 
+mdl_4 <- glm(status ~ age_bin + period_bin + bmi_fct, 
              data = person_year_2004, family = binomial(link = "cloglog"))
-mdl_5 <- glm(status ~ age_bin + period_bin + debut_era + bmi_fct + height_fct, 
+mdl_5 <- glm(status ~ age_bin + period_bin + height_fct, 
              data = person_year_2004, family = binomial(link = "cloglog"))
-mdl_6 <- glm(status ~ age_bin + period_bin + debut_era + bmi_fct + height_fct +
-               throws, 
+mdl_6 <- glm(status ~ age_bin + period_bin + throws, 
              data = person_year_2004, family = binomial(link = "cloglog"))
 # not mdl_7 or mdl_8 because I do not have player ratings.
-mdl_9 <- glm(status ~ age_bin + period_bin + debut_era + bmi_fct + height_fct +
-               throws + career_length_fct, 
+mdl_9 <- glm(status ~ age_bin + period_bin + career_length_fct, 
              data = person_year_2004, family = binomial(link = "cloglog"))
 ```
 
 ```{r}
-mdl_9 %>% gtsummary::tbl_regression()
+gt_1 <- gtsummary::tbl_regression(mdl_1, exponentiate = TRUE, intercept = TRUE)
+gt_1b <- gtsummary::tbl_regression(mdl_1, exponentiate = FALSE, intercept = TRUE)
+
+gt_2 <- gtsummary::tbl_regression(mdl_2, exponentiate = TRUE, intercept = TRUE)
+gt_3 <- gtsummary::tbl_regression(mdl_3, exponentiate = TRUE, intercept = TRUE)
+gt_4 <- gtsummary::tbl_regression(mdl_4, exponentiate = TRUE, intercept = TRUE)
+gt_5 <- gtsummary::tbl_regression(mdl_5, exponentiate = TRUE, intercept = TRUE)
+gt_6 <- gtsummary::tbl_regression(mdl_6, exponentiate = TRUE, intercept = TRUE)
+gt_9 <- gtsummary::tbl_regression(mdl_9, exponentiate = TRUE, intercept = TRUE)
 ```
+
+```{r}
+astercize <- function(e, p) {
+  aster_p <- case_when(
+    p < .001 ~ "***",
+    p < .01 ~ "**",
+    p < .05 ~ "*",
+    TRUE ~ ""
+  )
+  paste0(e, aster_p)
+}
+mdl_1 %>%
+  tidy(exponentiate = TRUE) %>%
+  mutate(lbl = map2_chr(scales::comma(estimate, .01), p.value, astercize))
+```
+
+```{r}
+gt_1 %>% as_tibble()
+```
+```{r}
+
+```
+
+
+Model 1 shows that the odds of death increase with age. Players aged 40–44 are 3.74 times as likely to die over the follow-up period as players aged 20–24, those aged 50–54 are 10.9 times as likely to die, and players aged 70–74 are 54.6 times as likely to die. Model 2 shows that more recent calendar periods are associated with lower risks of death, when adjusting for age. The greatest declines in mortality took place between the 1920–1929 and 1930–1939 periods and the 1960– 1969 and 1970–2004 periods. Model 3 shows that the coefficients for period and age are reduced but remain strong predictors of mortality after adjusting for the cohort of debut. There is no significant relationship between BMI (Model 4), height (Model 5) or handedness (Model 6) and mortality. However, those who play for 10 or more years have 12 percent (*HR* `r gtsummary::inline_text(gt_9, career_length_fct, "10+ years")`) lower odds of death over the follow-up period than those who have shorter careers (Model 9).
+
+Table 3 presents player life expectancy for the most recent period, 1970-2004, based on the hazard coefficients. This is my replication of Table 3 in the original study. I didn't quite figure out how to reproduce it, but followed the methodology presented by [MEASURE Evaluation](https://www.measureevaluation.org/resources/training/online-courses-and-resources/non-certificate-courses-and-mini-tutorials/population-analysis-for-planners/lesson-7.html). Some notes on column definitions:
+
+* Beta is the model coefficient estimator for the `age_bin` variable.
+
+
+```{r}
+tdy_2 <- mdl_2 %>% broom::tidy()
+
+life_tbl <- tibble(
+  age_bin = levels(person_year$age_bin),
+  term = paste0("age_bin", age_bin),
+  intercept = coef(mdl_2)["(Intercept)"],
+  period_bin_1970_Inf = coef(mdl_2)["period_bin[1970,Inf)"],
+  us_male_e = c(53.25, 48.67, 44.10, 39.57, 35.09, 30.66, 26.37, 22.30, 18.53, 
+                 15.12, 12.05, 9.39, 7.12, 5.31)
+) %>%
+  left_join(tdy_2 %>% select(term, estimate), by = "term") %>%
+  replace_na(list(estimate = 0)) %>%
+  mutate(
+    mx = 1 / (1 + exp(-(intercept + period_bin_1970_Inf + estimate))),
+    # nQx = if_else(row_number() == length(levels(person_year$age_bin)), 1, (5 * mx) / (1 + 2.5 * mx)),
+    nQx = (5 * mx) / (1 + 2.5 * mx),
+    nQx_comp = 1 - nQx,
+    nQx_cumsum = nQx_comp * lag(nQx_comp, n = 1, default = 1.0),
+    lx = 100000 * lag(nQx_cumsum, n = 1, default = 1.0),
+    ndx = lx * nQx,
+    Lx = (lx - ndx) * 5
+  ) %>%
+  arrange(desc(age_bin)) %>%
+  mutate(
+    Tx = cumsum(Lx),
+    ex = Tx / lx
+  ) %>%
+  arrange(age_bin) %>%
+  select(age_bin, estimate:ex, us_male_e)
+
+life_tbl %>%
+  flextable::flextable() %>%
+  flextable::set_header_labels(
+    age_bin = "Age Group",
+    estimate = "Beta",
+    nQx_comp = "1 - nQx",
+    nQx_cumsum = "cum(.)",
+    us_male_e = "U.S. Males"
+  ) %>%
+  flextable::colformat_double(j = c(2:6), digits = 4) %>%
+  flextable::colformat_double(j = c(7:10), digits = 0, big.mark = ",") %>%
+  flextable::colformat_double(j = c(11:12), digits = 1) %>%
+  flextable::theme_zebra()
+```
+
+
 
 
 # References
 
 <a id="SaintOnge2008"></a>Saint Onge JM, Rogers RG, Krueger PM. Major League Baseball Players' Life Expectancies. Soc Sci Q. 2008;89(3):817-830. doi:10.1111/j.1540-6237.2008.00562.x. [HTML](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2743321/).
+
+[Lesson 7: Overview of Life Tables and Survival Rates](https://www.measureevaluation.org/resources/training/online-courses-and-resources/non-certificate-courses-and-mini-tutorials/population-analysis-for-planners/lesson-7.html). Measure Evaluation.
+
