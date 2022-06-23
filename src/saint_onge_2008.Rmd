@@ -18,7 +18,7 @@ knit: (function(inputFile, encoding) {
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-Saint Onge et at ([2008](#SaintOnge2008)) use professional baseball player data to evaluate the role of anthropomorphic measures (height, body mass, handedness) and performance measures (career length, total player rating) on longevity. Using a discrete time hazards model, the authors find:
+Saint Onge et al ([2008](#SaintOnge2008)) use professional baseball player data to evaluate the role of anthropomorphic measures (height, body mass, handedness) and performance measures (career length, total player rating) on longevity. Using a discrete time hazards model, the authors find:
 
 * MLB players can expect almost five additional years of life. 
 * Height, weight, handedness, and player ratings are not associated with the risk of death, and
@@ -27,7 +27,6 @@ Saint Onge et at ([2008](#SaintOnge2008)) use professional baseball player data 
 This workbook reproduces the results from the same source data and methods.
 
 ```{r include=FALSE}
-library(Lahman)
 library(tidyverse)
 library(lubridate)
 library(scales)
@@ -37,15 +36,15 @@ library(gtsummary)
 
 # Data and Methods
 
-The authors used data from the electronic version of *Total Baseball* ([Google Scholar](https://scholar.google.com/scholar_lookup?title=Total+Baseball&publication_year=2004&)), but it was last published in 2008, so I will instead rely on the *Lahman* R package.
+The authors used data from the electronic version of *Total Baseball* ([Google Scholar](https://scholar.google.com/scholar_lookup?title=Total+Baseball&publication_year=2004&)), last published in 2008. I will use the *Lahman* R package.
 
 ```{r}
+library(Lahman)
+
 data("People", "Fielding", package = "Lahman")
 ```
 
-## Variables
-
-The authors created a person-year data set, with one row per player per year from debut to year of death (or censor). The data set included 241,218 person-years for 1902 - 2004 (103 years) and 6,772 players. Players were included in the data set if 1) they debuted between 1902 and 2004, 2) they were a position player (pitchers excluded), and 3) there were more than just a September call-up. Regarding condition 3, that means either the debut month number was less than 9, or their final game year was greater than their debut year.
+Onge et al created a person-year data set, with one row per player per year from debut to year of death (or censor). Players were included in the data set if they debuted between 1902 and 2004, were a position player (pitchers excluded), and were more than just a September call-up. Regarding the last condition, that means either the debut month number was less than 9, or their final game year was greater than their debut year.
 
 ```{r}
 person <- People %>%
@@ -78,7 +77,7 @@ person_year_0 <-
   )
 ```
 
-I don't quite match, but this isn't bad considering I'm using a different data source.
+Onge et al's data set included 241,218 person-years for 1902 - 2004 (103 years) with 6,772 players and 3,030 deaths. I don't quite match, but this isn't bad considering I'm using a different data source.
 
 ```{r collapse=TRUE}
 # 241,218 person-years? No, 246,402.
@@ -91,15 +90,16 @@ person_year_0 %>% filter(yr <= 2004) %>% pull(playerID) %>% n_distinct()
 person_year_0 %>% filter(deathYear <= 2004) %>% pull(playerID) %>% n_distinct()
 ```
 
-Define other variables.
+## Variables
+
+Onge et al define other variables.
 
 * `age` = number of years between date of birth and Jan 1 of year.
 * `age_bin` = five-year age groups from 20-24 to 85+.
-* `period_bin` = pre-1910, ten-year intervals from 1910 to 1970, and 1970-2004.
-* `period_bin_2` = same, but intervals from 1910 to 1980, and 1980-2021 (for additional analysis).
+* `period_bin` = pre-1910, ten-year intervals from 1910 to 1970, and 1970-2004. I added `period_bin_2` with intervals from 1910 to 1980, and 1980-2021 for additional analysis.
 * `debut_era` = Early (1902–1945), Golden (1946–1968), and Modern (1969–2004) based on date of debut.
 * `height_fct` = <6 feet, >=6 feet.
-* `bmi_fct` = Normal, Overwweight, Obese.
+* `bmi_fct` = Normal, Overweight, Obese.
 * `career_length_fct` = <10 years, 10+ years
 * `throws` = Right Handed, Left Handed
 * `status` = 0 alive/censored, 1 dead
@@ -154,10 +154,10 @@ person_year <- person_year_0 %>%
   )
 ```
 
-Table 1 presents the descriptive statistics of the covariates based on the pooled person-years.
+Table 1 presents the descriptive statistics of the covariates based on the pooled person-years. It is directly comparable to Onge et al's [Table 1](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2743321/table/T1/) (external). Both data sets have the most person-years at age group [30, 35), but my data set has more person-years for younger people, aged < 45 years. I also have relatively more person-year records for the periods before 1940 and the Early (1902 - 1945) debut year cohort. Consistent with the original study, 41 percent of players-years are classified as overweight and .3 percent are obese. 54 percent are less than six feet tall (54.81 in Onge et al), and 86 percent are right-handed. 26 percent of players played 10 years or more (23.54 in Onge et al). I do not have career rating or first-year rating measures in my data set.
 
 ```{r}
-person_year %>%
+t1 <- person_year %>%
   filter(yr <= 2004) %>%
   tbl_summary(
     label = list(
@@ -172,16 +172,38 @@ person_year %>%
     ),
     include = c(age_bin, period_bin, debut_era, height_fct, bmi_fct, 
                 career_length_fct, throws, status)
-  ) %>%
-  gtsummary::as_flex_table() %>%
+  ) 
+
+t2 <- person_year %>%
+  filter(yr <= 2004) %>%
+  replace_na(list(status = 0)) %>%
+  group_by(playerID, debut_era, bmi_fct, height_fct, throws, career_length_fct) %>%
+  summarize(.groups = "drop", status = max(status)) %>%
+  tbl_summary(
+    label = list(
+      debut_era ~ "Cohort",
+      bmi_fct ~ "Body Mass Index",
+      height_fct ~ "Height",
+      throws ~ "Handedness",
+      career_length_fct = "Seasons Played",
+      status = "Died"
+    ),
+    include = c(debut_era, height_fct, bmi_fct, 
+                career_length_fct, throws, status)
+  )
+
+gtsummary::tbl_merge(list(t1, t2), tab_spanner = c("Person-Years", "Distinct Persons")) %>%
+  gtsummary::as_flex_table() %>% 
+  flextable::theme_vanilla() %>%
+  flextable::bg(i = ~ is.na(stat_0_1), bg = "gray80") %>%
   flextable::set_caption("Table 1. Percentage of selected characteristics, MLB players, 1902-2004.")
 ```
 
-Consistent with the original study, 41 percent of players-years are classified as overweight and .3% are obese (.28% in original study). 54 percent are less than six feet tall (54.81 in original study), and 86 percent are right-handed. 26 percent of players played 10 years or more (24 percent in original study).
+I added a second column to Table 1 showing distinct player characteristics. It is evident that there are more records associated with earlier players. For example, while 42% of players debuted between 1902 and 1945 (Cohort Early), they comprise 57 percent of the player-year rows.
 
 ## Method
 
-The authors use logistic regression to estimate a discrete time hazards model for risk of death between the debut date and the end of the follow-up period. They explain that they start with debut date rather than birth date because by definition all players have survived until their debut. The advantage of using a discrete time hazards model over a Cox proportional hazards model is that you can calculate life tables with covariates.
+The authors use logistic regression to estimate a discrete time hazards model for risk of death between the debut date and the end of the follow-up period. They explain that they start with debut date rather than birth date because by definition all players have survived until their debut. The advantage of using a discrete time hazards model over a Cox proportional hazards model is that you can calculate life tables with the covariate estimates.
 
 ```{r}
 person_year_2004 <- person_year %>% filter(yr <= 2004)
@@ -202,17 +224,9 @@ mdl_9 <- glm(status ~ age_bin + period_bin + career_length_fct,
              data = person_year_2004, family = binomial(link = "cloglog"))
 ```
 
-```{r}
-gt_1 <- gtsummary::tbl_regression(mdl_1, exponentiate = TRUE, intercept = TRUE)
-gt_1b <- gtsummary::tbl_regression(mdl_1, exponentiate = FALSE, intercept = TRUE)
+# Results
 
-gt_2 <- gtsummary::tbl_regression(mdl_2, exponentiate = TRUE, intercept = TRUE)
-gt_3 <- gtsummary::tbl_regression(mdl_3, exponentiate = TRUE, intercept = TRUE)
-gt_4 <- gtsummary::tbl_regression(mdl_4, exponentiate = TRUE, intercept = TRUE)
-gt_5 <- gtsummary::tbl_regression(mdl_5, exponentiate = TRUE, intercept = TRUE)
-gt_6 <- gtsummary::tbl_regression(mdl_6, exponentiate = TRUE, intercept = TRUE)
-gt_9 <- gtsummary::tbl_regression(mdl_9, exponentiate = TRUE, intercept = TRUE)
-```
+Table 2 presents the model coefficient estimates for each model. Models 7 and 8 are missing because I do not have the player ratings to to fit them. Table is is directly comparable to Onge et al's [Table 2](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2743321/table/T2/) (external). 
 
 ```{r}
 astercize <- function(e, p) {
@@ -224,73 +238,121 @@ astercize <- function(e, p) {
   )
   paste0(e, aster_p)
 }
-mdl_1 %>%
-  tidy(exponentiate = TRUE) %>%
-  mutate(lbl = map2_chr(scales::comma(estimate, .01), p.value, astercize))
+
+bind_rows(
+  `Model 1` = tidy(mdl_1, exponentiate = FALSE),
+  model_2 = tidy(mdl_2, exponentiate = FALSE),
+  model_3 = tidy(mdl_3, exponentiate = FALSE),
+  model_4 = tidy(mdl_4, exponentiate = FALSE),
+  model_5 = tidy(mdl_5, exponentiate = FALSE),
+  model_6 = tidy(mdl_6, exponentiate = FALSE),
+  model_9 = tidy(mdl_9, exponentiate = FALSE),
+  .id = "model_num"
+) %>%
+  mutate(lbl = map2_chr(scales::comma(estimate, .01), p.value, astercize)) %>%
+  pivot_wider(id_cols = term, names_from = model_num, values_from = lbl) %>%
+  flextable::flextable() %>%
+  flextable::align(j = 2:8, align = "right") %>%
+  flextable::theme_zebra() %>%
+  flextable::autofit() %>%
+  flextable::set_caption("Table 2. MLB hazard odds ratio coeficients on mortality, 1902 - 2004.")
 ```
 
-```{r}
-gt_1 %>% as_tibble()
-```
-```{r}
+Model 1 shows that the odds of death increase with age. Players aged 40–44 are `r tidy(mdl_1, exponentiate = TRUE) %>% filter(term == "age_bin[40,45)") %>% pull(estimate) %>% comma(.01)` (exp(1.07)) times as likely to die over the follow-up period as players aged 20–24 (compare to exp(1.32) = 3.74 times in Onge et all), those aged 50–54 are `r tidy(mdl_1, exponentiate = TRUE) %>% filter(term == "age_bin[50,55)") %>% pull(estimate) %>% comma(.01)` (exp(2.11)) times as likely to die (10.9 times in Onge et al), and players aged 70–74 are `r tidy(mdl_1, exponentiate = TRUE) %>% filter(term == "age_bin[70,75)") %>% pull(estimate) %>% comma(.1)` (exp(3.46)) times as likely to die (54.6 times in Onge et al). 
 
-```
+Model 2 shows that, adjusting for age, more recent calendar periods are associated with lower risks of death. The greatest declines in mortality took place between the 1920–1929 and 1930–1939 periods (hazard odds ratio relative to 1910-1919 of exp(-0.36) = `r tidy(mdl_2, exponentiate = TRUE) %>% filter(term == "period_bin[1920,1930)") %>% pull(estimate) %>% comma(.01)` to exp(-0.75) = `r tidy(mdl_2, exponentiate = TRUE) %>% filter(term == "period_bin[1930,1940)") %>% pull(estimate) %>% comma(.01)`) (exp(-.54) = 0.58 to exp(-1.08) = 0.34 in Onge et al) and the 1960–1969 and 1970–2004 periods (exp(-0.86) = `r tidy(mdl_2, exponentiate = TRUE) %>% filter(term == "period_bin[1960,1970)") %>% pull(estimate) %>% comma(.01)` to exp(-1.16) = `r tidy(mdl_2, exponentiate = TRUE) %>% filter(term == "period_bin[1970,Inf)") %>% pull(estimate) %>% comma(.01)`) (exp(-1.47) = 0.23 to exp(-1.97) = 0.14 in Onge et al). 
 
+Model 3 of Onge et al shows that the coefficients for period and age are reduced but remain strong predictors of mortality after adjusting for the cohort of debut. However my fit shows the Modern debut era significantly *positively* associated with mortality risk and the period predictors reduced *negatively*. This might be because the debut era is positively correlated with the period bins.
 
-Model 1 shows that the odds of death increase with age. Players aged 40–44 are 3.74 times as likely to die over the follow-up period as players aged 20–24, those aged 50–54 are 10.9 times as likely to die, and players aged 70–74 are 54.6 times as likely to die. Model 2 shows that more recent calendar periods are associated with lower risks of death, when adjusting for age. The greatest declines in mortality took place between the 1920–1929 and 1930–1939 periods and the 1960– 1969 and 1970–2004 periods. Model 3 shows that the coefficients for period and age are reduced but remain strong predictors of mortality after adjusting for the cohort of debut. There is no significant relationship between BMI (Model 4), height (Model 5) or handedness (Model 6) and mortality. However, those who play for 10 or more years have 12 percent (*HR* `r gtsummary::inline_text(gt_9, career_length_fct, "10+ years")`) lower odds of death over the follow-up period than those who have shorter careers (Model 9).
+Model 4 shows that obese class 1 players are `r tidy(mdl_4, exponentiate = TRUE) %>% filter(term == "bmi_fctObese Class I (30.0 – <35.0)") %>% pull(estimate) %>% comma(.1)` (exp(0.64)) times as likely to die as normal weight players. The magnitude of this relationship was similar in Onge et al (exp(.57) = 1.8), but was not significant at the .05 level. Similarly, model 5 shows players over six feet have a slight increase in mortality risk, `r tidy(mdl_5, exponentiate = TRUE) %>% filter(term == "height_fct>=6 feet") %>% pull(estimate) %>% comma(.1)` (exp(0.08)), but that relationship was not significant in Saint Onge et al. Left-handedness showed nearly zero effect and was not significant in either my model 6 or in Saint Onge et al.
 
-Table 3 presents player life expectancy for the most recent period, 1970-2004, based on the hazard coefficients. This is my replication of Table 3 in the original study. I didn't quite figure out how to reproduce it, but followed the methodology presented by [MEASURE Evaluation](https://www.measureevaluation.org/resources/training/online-courses-and-resources/non-certificate-courses-and-mini-tutorials/population-analysis-for-planners/lesson-7.html). Some notes on column definitions:
+Finally, those who play for 10 or more years have `r tidy(mdl_9, exponentiate = TRUE) %>% filter(term == "career_length_fct10+ years") %>% mutate(lwr = (1 - estimate) * 100) %>% pull(lwr) %>% comma(1)`) percent lower odds of death ((1 - exp(-.13)) * 100) over the follow-up period than those who have shorter careers (Model 9). Saint Onge et al reported a 14 percent lower odds.
 
-* Beta is the model coefficient estimator for the `age_bin` variable.
+Table 3 presents player life expectancy for the most recent period, 1970-2004, based on the hazard coefficients from model 2. Table 3 is directly comparable to [Table 3](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2743321/table/T3/) of Saint Onge et al. I didn't quite figure out how to reproduce it, but followed the methodology presented by [Measure Evaluation](https://www.measureevaluation.org/resources/training/online-courses-and-resources/non-certificate-courses-and-mini-tutorials/population-analysis-for-planners/lesson-7.html) with further explanation from [page 442](https://www.google.com/books/edition/_/DRpWZlKIqwoC?hl=en&gbpv=1&bsq=central%20death%20rate) of **The Methods and Materials of Demography** (Shryock, et al, [1980](#Shryock1980)). Some notes on column definitions:
 
+* **mx** is the age-specific central death rate, $m_x = 1 / (1 + e^{-z})$ where *z* is sum of the model coefficients from model 2 for period 1970 - 2004: intercept = `r coef(mdl_2)["(Intercept)"] %>% comma(.01)`, period 1970 - 2004 = `r coef(mdl_2)["period_bin[1970,Inf)"] %>% comma(.01)` and beta = [value from age group]. E.g., $m_{25-30}$ = `r comma(1 / (1 + exp(-(coef(mdl_2)["(Intercept)"] + coef(mdl_2)["period_bin[1970,Inf)"] + coef(mdl_2)["age_bin[25,30)"]))), .0001)`, or  $1 / (1 + e^{-(`r coef(mdl_2)["(Intercept)"] %>% comma(.01)` + `r coef(mdl_2)["period_bin[1970,Inf)"] %>% comma(.01)` + `r coef(mdl_2)["age_bin[25,30)"] %>% comma(.01)`)})$.
+* **nQx** is the five-year mortality rate, given by $\frac{5 \cdot m_x}{1 + g_x m_x}$ where $g_x$ is a factor measuring the average number of years lived within the age group and is initially assumed by be 2.5 years. This is from equation 25 in Shryock et al ([1980](#Shryock1980)]).
+* **1 - nQx** is the complement of nQx, an intermediate calc. It is the five-year survival rate.
+* **cum(.)** is the cumulative product of 1 - nQx. Whereas 1 - nQx is an instantaneous probability, cum(.) is a cumulative probability. It is the probability of living to that age, then living another five years.
+* **lx** is the number of persons alive at the beginning of the age interval. It equals the prior cum(.) * 100,000. The 100,000 normalizes the presentation to a hypothetical population of 100,000.
+* **ndx** is the number of persons dying during the age interval, lx * nQx.
+* **Lx** is the number of person-years in the age interval, (lx - ndx) * 5. It is the average population size.
+* **Tx** is the cumulative sum of Lx, moving from bottom to top. It is the total number of person-years that would be lived for the age cohort if the cohort were to progress through the remainder of the life table.
+* **ex** is the average remaining life time, Tx / lx.
 
 ```{r}
 tdy_2 <- mdl_2 %>% broom::tidy()
 
 life_tbl <- tibble(
-  age_bin = levels(person_year$age_bin),
-  term = paste0("age_bin", age_bin),
+  age_bin = rep(levels(person_year$age_bin), 8),
+  age_bin_term = paste0("age_bin", age_bin),
+  period_bin = map(levels(person_year$period_bin), ~rep(.x, 14)) %>% unlist(),
+  period_bin_term = paste0("period_bin", period_bin),
   intercept = coef(mdl_2)["(Intercept)"],
-  period_bin_1970_Inf = coef(mdl_2)["period_bin[1970,Inf)"],
-  us_male_e = c(53.25, 48.67, 44.10, 39.57, 35.09, 30.66, 26.37, 22.30, 18.53, 
-                 15.12, 12.05, 9.39, 7.12, 5.31)
+  # period_bin_1970_Inf = coef(mdl_2)["period_bin[1970,Inf)"],
+  us_male_e = rep(c(53.25, 48.67, 44.10, 39.57, 35.09, 30.66, 26.37, 22.30, 18.53, 
+                 15.12, 12.05, 9.39, 7.12, 5.31), 8)
 ) %>%
-  left_join(tdy_2 %>% select(term, estimate), by = "term") %>%
-  replace_na(list(estimate = 0)) %>%
+  left_join(tdy_2 %>% select(age_bin_term = term, age_bin_est = estimate), 
+            by = "age_bin_term") %>%
+  left_join(tdy_2 %>% select(period_bin_term = term, period_bin_est = estimate), 
+            by = "period_bin_term") %>%
+  replace_na(list(age_bin_est = 0, period_bin_est = 0)) %>%
+  group_by(period_bin) %>%
   mutate(
-    mx = 1 / (1 + exp(-(intercept + period_bin_1970_Inf + estimate))),
-    # nQx = if_else(row_number() == length(levels(person_year$age_bin)), 1, (5 * mx) / (1 + 2.5 * mx)),
+    mx = 1 / (1 + exp(-(intercept + period_bin_est + age_bin_est))),
     nQx = (5 * mx) / (1 + 2.5 * mx),
     nQx_comp = 1 - nQx,
-    nQx_cumsum = nQx_comp * lag(nQx_comp, n = 1, default = 1.0),
-    lx = 100000 * lag(nQx_cumsum, n = 1, default = 1.0),
+    nQx_cumprod = nQx_comp * lag(nQx_comp, n = 1, default = 1.0),
+    lx = 100000 * lag(nQx_cumprod, n = 1, default = 1.0),
     ndx = lx * nQx,
     Lx = (lx - ndx) * 5
   ) %>%
-  arrange(desc(age_bin)) %>%
+  arrange(period_bin, desc(age_bin)) %>%
   mutate(
     Tx = cumsum(Lx),
     ex = Tx / lx
   ) %>%
-  arrange(age_bin) %>%
-  select(age_bin, estimate:ex, us_male_e)
+  ungroup() %>%
+  arrange(period_bin, age_bin) %>%
+  select(period_bin, age_bin, intercept, age_bin_est, period_bin_est, mx:ex, us_male_e)
+
+life_flex <- function(dat) {
+  dat %>%
+    select(-c(intercept, age_bin_est, period_bin_est)) %>%
+    flextable::flextable() %>%
+    flextable::set_header_labels(
+      age_bin = "Age Group",
+      # age_bin_est = "Beta",
+      nQx_comp = "1 - nQx",
+      nQx_cumprod = "cum(.)",
+      us_male_e = "U.S. Males"
+    ) %>%
+    flextable::colformat_double(j = c(2:5), digits = 4) %>%
+    flextable::colformat_double(j = c(6:9), digits = 0, big.mark = ",") %>%
+    flextable::colformat_double(j = c(10:11), digits = 1) %>%
+    flextable::theme_zebra()
+}
 
 life_tbl %>%
-  flextable::flextable() %>%
-  flextable::set_header_labels(
-    age_bin = "Age Group",
-    estimate = "Beta",
-    nQx_comp = "1 - nQx",
-    nQx_cumsum = "cum(.)",
-    us_male_e = "U.S. Males"
-  ) %>%
-  flextable::colformat_double(j = c(2:6), digits = 4) %>%
-  flextable::colformat_double(j = c(7:10), digits = 0, big.mark = ",") %>%
-  flextable::colformat_double(j = c(11:12), digits = 1) %>%
-  flextable::theme_zebra()
+  filter(period_bin == "[1970,Inf)") %>%
+  select(-period_bin) %>%
+  life_flex()
 ```
 
+Column U.S. Males is taken directly from Saint Onge et al. Table 3 in Saint Onge et al shows that players have higher life expectancies than the general U.S. male population at all ages, but the advantage diminishes with age. 20-year-old MLB players can expect to live 58.1 additional years in the period 1970 - 2004 compared to 53.3 for comparable males in the U.S. population. My Table 3 show a more modest advantage. A 20-year-old MLB player can expect to live 54.9 additional years, 1.7 more than comparable males in the U.S. population (compare to 4.8 in Saint Onge et al). The advantage diminishes, then becomes a disadvantage for 60-65 year old MLB players.
 
+Figure 1 illustrates life expectancies for calendar periods calculated from Model 2 in Table 2. It is directly comparable to Figure 1 Panel A in Saint Onge et al. It shows that each period ushers in higher life expectancies for each cohort. Life expectancies at age 20 were `r life_tbl %>% filter(age_bin == "[0,25)", period_bin == "[1910,1920)") %>% pull(ex) %>% comma(.1)` years (45.7 in Saint Onge et al) among those alive between 1910 and 1919, `r life_tbl %>% filter(age_bin == "[0,25)", period_bin == "[1930,1940)") %>% pull(ex) %>% comma(.1)` years (53.6 years in Saint Onge et al) among those alive between 1930 and 1939, `r life_tbl %>% filter(age_bin == "[0,25)", period_bin == "[1950,1960)") %>% pull(ex) %>% comma(.1)` years (56.3 years in Saint Onge et al) among those alive between 1950 and 1959, and `r life_tbl %>% filter(age_bin == "[0,25)", period_bin == "[1970,Inf)") %>% pull(ex) %>% comma(.1)` years (59.6 years in Saint Onge et al) among those alive between 1970 and 2004.
+
+```{r}
+life_tbl %>%
+  filter(period_bin %in% c("[1910,1920)", "[1930,1940)", "[1950,1960)", "[1970,Inf)")) %>%
+  ggplot(aes(x = age_bin, y = ex, group = period_bin, color = fct_rev(period_bin))) +
+  geom_line() +
+  theme_light() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(subtitle = "Figure 1. Period", color = NULL, x = "Age", y = "e(x)")
+```
 
 
 # References
@@ -299,3 +361,4 @@ life_tbl %>%
 
 [Lesson 7: Overview of Life Tables and Survival Rates](https://www.measureevaluation.org/resources/training/online-courses-and-resources/non-certificate-courses-and-mini-tutorials/population-analysis-for-planners/lesson-7.html). Measure Evaluation.
 
+<a id="Shryock1980">Shryock HS, Siegel JS, Larmon EA, (1980).The Methods and Materials of Demography. United States:Department of Commerce, Bureau of the Census. [Google Books](https://www.google.com/books/edition/_/DRpWZlKIqwoC?hl=en&gbpv=0)
