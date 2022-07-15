@@ -5,6 +5,7 @@ This project is a statistical analysis of the association between longevity (lif
 * **Evaluate data sources**. There are at least two data sources that can support this project. [Retrosheet](https://www.retrosheet.org/biofile.htm) publishes a single text file of players that is easy to work with and comprehensive, but somewhat limited in the number of attributes. [Lahman's Baseball Database](https://www.seanlahman.com/baseball-archive/statistics/) is an entire data model. It has an associated [R package](https://github.com/cdalzell/Lahman) and it was also used in [a similar study](http://www.med.mcgill.ca/epidemiology/hanley/bios601/CandHchapter06/baseball_players.pdf) by Abel and Kruger.
 * **Review Literature**. The two studies referenced above lay the foundation that this study will build upon. In addition, Redelmeier and Singh recently published [an update to their Academy study](https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0266563) in PLoS ONE.
   * **abel_kruger_2005** ([html](./abel_kruger_2005.html), [Rmd](../src/abel_kruger_2005.Rmd)). Reproduction of Abel & Kruger 2005 study (incomplete - I'm struggling with the data setup.)
+  * **saint_onge_2008** ([html](./saint_onge_2008.html), [Rmd](../src/saint_onge_2008.Rmd)). Reproduction of *Major League Baseball Players' Life Expectancies* ([2008](#SaintOnge2008)).
 * **Groundwork**. The Abel and Kruger study is so similar to this study, both is subject and data source, that reproducing their results will be a good exercise in working with the data.
 
 
@@ -37,7 +38,7 @@ Redelmeier DA, Singh SM (2022) Long-term mortality of academy award winning acto
 
 [Retrosheet](https://www.retrosheet.org/biofile.htm).
 
-Saint Onge JM, Rogers RG, Krueger PM. Major League Baseball Players' Life Expectancies. Soc Sci Q. 2008;89(3):817-830. doi:10.1111/j.1540-6237.2008.00562.x. [HTML](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2743321/).
+<a id="SaintOnge2008"></a>Saint Onge JM, Rogers RG, Krueger PM. Major League Baseball Players' Life Expectancies. Soc Sci Q. 2008;89(3):817-830. doi:10.1111/j.1540-6237.2008.00562.x. [HTML](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2743321/).
 
 [Sean Lahman's Baseball Database](https://www.seanlahman.com/baseball-archive/statistics/).
 

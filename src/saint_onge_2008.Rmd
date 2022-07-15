@@ -1,5 +1,6 @@
 ---
-title: "Reproducing the 2008 Sain Onge, Rogers, and Krueger Study"
+title: "Review of Major League Baseball Players' Life Expectancies"
+subtitle: "Reproducing and Updating the 2008 Saint Onge, Rogers, and Krueger Study"
 author: "Michael Foley"
 date: "`r Sys.Date()`"
 output: 
@@ -9,7 +10,7 @@ output:
     toc: true
     toc_float: true
     highlight: haddock
-    code_folding: show
+    code_folding: hide
 knit: (function(inputFile, encoding) {
   rmarkdown::render(inputFile, encoding = encoding, output_dir = "../docs") })
 ---
@@ -18,13 +19,13 @@ knit: (function(inputFile, encoding) {
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-Saint Onge et al. ([2008](#SaintOnge2008)) (the Authors) used professional baseball player data to evaluate the role of anthropomorphic measures (height, body mass, handedness) and performance measures (career length, total player rating) on longevity. Using a discrete time hazards model, the authors found:
+In their 2008 study, *Major League Baseball Players’ Life Expectancies*, Saint Onge et al. ([2008](#SaintOnge2008)) (the Authors) used major league baseball (MLB) player data from the *Total Baseball* ([2004](#TotalBaseball])) encyclopedia to evaluate the role of anthropomorphic measures (height, body mass, handedness) and performance measures (career length, total player rating) on longevity. Using a discrete time hazards model, the Authors found:
 
 * MLB players can expect almost five additional years of life, 
 * Height, weight, handedness, and player ratings are not associated with the risk of death, and
 * Career length is inversely associated with the risk of death.
 
-This workbook is a reproduction of the analysis using an updated data source.
+This workbook reproduces the analysis with an alternative data source, Sean Lahman's Baseball Database ([2022](#Lahman)). Most of the Authors' findings are confirmed except that instead of five years of additional life for MLB players, only one year is expected. Updating the data through the 2021 season, measured mortality risk was higher than that calculated from the 2004 data. A Cox proportional hazards model confirmed the Authors' findings that height, weight, and handedness are not associated with risk of death, and career length is inversely associated with risk of death.
 
 ```{r include=FALSE}
 library(tidyverse)
@@ -33,15 +34,21 @@ library(scales)
 library(broom)
 library(gtsummary)
 library(survival)
+
+# Life expectancy reported in Authors' life table, Table 3.
+us_male_e <- c(53.25, 48.67, 44.10, 39.57, 35.09, 30.66, 26.37, 22.30, 18.53, 
+               15.12, 12.05,  9.39,  7.12, 5.31)
+authors_e <- c(58.11, 53.19, 48.31, 43.45, 38.62, 33.90, 29.28, 25.01, 20.98,
+               17.25, 13.90, 10.97,  8.35, 6.70)
 ```
 
-# Data and Methods
+# Data
 
-The Authors analyzed data from the electronic version of *Total Baseball* ([2004](#TotalBaseball])). *Total Baseball* was last published in 2008. Instead, I am using the R version of the 2021 edition of Sean Lahman's Baseball Database, the **Lahman** R package v10.0-1 ([2022](#Lahman)).
+The Authors analyzed data from the electronic version of *Total Baseball* ([2004](#TotalBaseball])). *Total Baseball* was last published in 2008. However, another source of detailed baseball player data is now available. The R version of the 2021 edition of Sean Lahman's Baseball Database, the **Lahman** R package v10.0-1 ([2022](#Lahman)) is continuously updated and available for download on CRAN.
 
-The Authors restricted their data set to position players who debuted between 1902 and 2004. Pitchers were excluded due to potential differences in career length and selection into MLB. They also excluded players whose career consisted of just a September call-up. That is, they excluded players appearing for a month or less at the end of the season and not not playing the following season.
+The Authors restricted their data set to position players who debuted between 1902 and 2004. They excluded pitchers due to potential differences in career length and selection into major league baseball. They also excluded players whose career consisted of a mere September call-up by removing players who played for a month or less at the end of the season and who did not play the following season.
 
-The Authors do not explain how they defined pitchers. Occasionally a position will pitch in a blowout game to avoid wasting actual pitchers in a lost cause. Also, some players changed positions, the most famous being Babe Ruth. [Ruth pitched](http://www.baberuthcentral.com/babe-ruth-statistics/babes-ruths-full-baseballstatistics/babes-ruths-pitching-stats/) from 1914 - 1919, and a few games in 1920, 1921, 1930, and 1933. I will define pitchers as players who never played any position other than pitcher. That is, I will include players with non-pitching fielding statistics in the **Lahman** Fielding data set.
+The Authors did not explain how they define "pitcher". Occasionally a position player will pitch during a blowout game to avoid wasting actual pitchers in a lost cause. Also, there are instances of players changing positions, the most famous being Babe Ruth. [Ruth pitched](http://www.baberuthcentral.com/babe-ruth-statistics/babes-ruths-full-baseballstatistics/babes-ruths-pitching-stats/) from 1914 - 1919, and a few games in 1920, 1921, 1930, and 1933. I defined pitchers as players who *never* played any position other than pitcher. Using the **Lahman** Fielding data set, I excluded players whose only fielding statistics were for the pitcher position.
 
 ```{r}
 library(Lahman)
@@ -68,67 +75,89 @@ person_0 <- People %>%
   )
 ```
 
-The Authors identify a few players with no death date that would be over 95 years old if alive. They dropped one record as a result. I have six players with no death date that would be over 95. All six are described as living in Wikipedia.
+The Authors identified eleven players with no death date who, if alive, would have been over 95 years old at the end of 2004. After researching, they dropped one of these records, Jack Dalton, born on July 3, 1885. In the **Lahman** data, Dalton is recorded with a death year of `r person_0 %>% filter(playerID == "daltoja01") %>% pull(deathYear)`, making him `r person_0 %>% filter(playerID == "daltoja01") %>% mutate(age = time_length(interval(birthDate, deathDate), "year")) %>% pull(age) %>% comma(1)` years old when he died. The **Lahman** data includes ten players who were over 95 at the end of 2004. All have death dates.
 
 ```{r}
 person_0 %>% 
-  mutate(over95 = 2021 - birthYear >= 95) %>%
-  filter(over95, is.na(deathYear)) %>%
-  select(nameFirst, nameLast, birthDate)
+  mutate(
+    age_at_2004 = time_length(interval(birthDate, ymd(20041231)), "year") %>% round(),
+    age_at_death = time_length(interval(birthDate, deathDate), "year") %>% round()
+  ) %>%
+  filter(age_at_2004 >= 95 & (is.na(deathYear) | deathYear > 2004)) %>%
+  select(nameFirst, nameLast, birthDate, deathDate, age_at_2004, age_at_death)
 ```
 
-I do have a couple unusual records related to death date though. Alfredo Cabrera and Hector Martinez have no death date because of incomplete month and day information. I can either impute a death date, or drop the record. Since I know at least the year, and in one case the month, I'll keep both records and impute the middle month and/or day.
+The **Lahman** data does have seven players with no death date would would be over 95 years old at the end of the 2021 season.
 
 ```{r}
-# Two players with incomplete death dates.
+person_0 %>% 
+  mutate(
+    age_at_2021 = time_length(interval(birthDate, ymd(20211231)), "year") %>% round(),
+    age_at_death = time_length(interval(birthDate, deathDate), "year") %>% round()
+  ) %>%
+  filter(age_at_2021 >= 95 & is.na(deathYear)) %>%
+  select(nameFirst, nameLast, birthDate, age_at_2021)
+```
+
+The Wikipedia articles on each player as of Jul 2022 indicated all were still alive.
+
+However, the **Lahman** data includes a couple unusual records related to death date. Alfredo Cabrera and Hector Martinez have no death date because of incomplete month and day information. 
+
+```{r}
 person_0 %>% 
   filter(is.na(deathDate), !is.na(deathYear)) %>%
   select(nameFirst, nameLast, birthDate, deathYear, deathMonth, deathDay)
+```
 
-# Impute deathDate if necessary
+One option to handle incomplete data is imputing a death date. Another is dropping the record. A death year is present for both players, and in one case the month is present too. I opted to keep both records and impute the middle month of year (Jun) and/or day of month (15th).
+
+```{r}
 person_1 <- person_0 %>%
   mutate(deathDate = coalesce(deathDate, 
                               ymd(paste(deathYear,
                                   coalesce(deathMonth, 6), 
-                                  coalesce(deathDay, 15)), quiet = TRUE)))
+                                  coalesce(deathDay, 15)), 
+                                  quiet = TRUE)))
 ```
 
-There's a similar problem with birth dates. I'll handle them the same way.
+There is a similar problem with birth dates. Two have missing birth months and days.
 
 ```{r}
-# Two players with incomplete death dates.
 person_1 %>% 
   filter(is.na(birthDate)) %>%
-  select(nameFirst, nameLast, birthDate, birthYear, birthMonth, birthDay)
+  select(nameFirst, nameLast, birthYear, birthMonth, birthDay, deathDate)
+```
 
-# Impute birthDate if necessary
+I handled them the same way, imputing a mid-month and day-of-month.
+
+```{r}
 person_2 <- person_1 %>%
   mutate(birthDate = coalesce(birthDate, 
                               ymd(paste(birthYear,
                                   coalesce(birthMonth, 6), 
-                                  coalesce(birthDay, 15)), quiet = TRUE)))
+                                  coalesce(birthDay, 15)), 
+                                  quiet = TRUE)))
 ```
 
-The Authors note that the youngest player to die is Al Montgomery. I can confirm that.
+The Authors note that the youngest age at death was for Al Montgomery (22.5 years). The **Lahman** data confirms that Montgomery was the youngest, but reports an age of 21.8 years. 
+
+```{r}
+person_2 %>% 
+  filter(!is.na(deathYear)) %>%
+  mutate(age = time_length(interval(birthDate, deathDate), "year")) %>%
+  select(nameFirst, nameLast, birthDate, deathDate, age) %>%
+  arrange(age) %>%
+  head()
+```
+
+The discrepancy may be explained by how the Authors calculated ages. They calculate age for each person-year as the number of years (and fractions of years) between the date of birth and January 1 of the calendar year in each person-year. So Montgomery's age on January 1, 1943 would have been 22.5. This would seem to bias lifetimes upward by up to one year.
+
+Otherwise, the implied ages look reasonable. The following plot of the age distributions has reasonable begin, end, and peak years. The mode age for deceased players is about 82.
 
 ```{r}
 person_2 %>% 
   mutate(
-    all_ages = time_length(interval(birthDate, coalesce(deathDate, ym(202109))), 
-                           "year"),
-    is_alive = factor(if_else(is.na(deathYear), "Alive", "Dead"))
-  ) %>%
-  filter(is_alive == "Dead", all_ages < 25) %>%
-  select(nameFirst, nameLast, birthDate, deathDate, finalGameYear, all_ages) %>%
-  arrange(all_ages)
-```
-
-Otherwise, the implied ages look reasonable.
-
-```{r}
-person_2 %>% 
-  mutate(
-    all_ages = time_length(interval(birthDate, coalesce(deathDate, ym(202109))), 
+    all_ages = time_length(interval(birthDate, coalesce(deathDate, ymd(20211231))), 
                            "year"),
     is_alive = factor(if_else(is.na(deathYear), "Alive", "Dead"))
   ) %>%
@@ -136,26 +165,30 @@ person_2 %>%
   geom_density(alpha = .4, color = "gray40") +
   theme_light() +
   theme(legend.position = "top") +
-  labs(title = "Data set age distribution.",
+  labs(title = "Lahman data set age distribution.",
        x = "Age at death, or at end of 2021 (if alive)", fill = NULL)
 ```
 
+## Variables
+
 The Authors defined several variables from the player attributes.
 
-* `cohort` = Period of MLB debut, Early (1902–1945), Golden (1946–1968), and Modern (1969–2004).
-* `height_fct` = <6 feet, >=6 feet.
-* `bmi_fct` = Normal (18.5 - <25.0), Overweight (25.0 – <30.0), Obese Class I (30.0 – <35.0)
-* `career_length_fct` = <10 years, 10+ years
-* `throws` = Right Handed, Left Handed
+* **Cohort**. Period of MLB debut (Early (1902–1945), Golden (1946–1968), and Modern (1969–2004)).
+* **Height**. Height >= 6 feet indicator (<6 feet, >=6 feet).
+* **Body Mass Index** (BMI). BMI range indicators (Normal (18.5 - <25.0), Overweight (25.0 – <30.0), Obese Class I (30.0 – <35.0)).
+* **Seasons Played**. Career length >=10 years indicator (<10 years, 10+ years).
+* **Handedness**. Dominant hand (Right Handed, Left Handed).
+
+These are all nominal variables, coded as factors in R with the first value as the reference level.
 
 ```{r}
 person_3 <- person_2 %>%
   mutate(
     cohort = factor(
-      case_when(between(debutYear, 1902, 1945) ~ "Early (1902–1945)",
-                between(debutYear, 1946, 1968) ~ "Golden (1946–1968)",
+      case_when(between(debutYear, 1902, 1945) ~ "Early (1902-1945)",
+                between(debutYear, 1946, 1968) ~ "Golden (1946-1968)",
                 debutYear >= 1969 ~ "Modern (1969+)"),
-      levels = c("Early (1902–1945)", "Golden (1946–1968)", "Modern (1969+)")
+      levels = c("Early (1902-1945)", "Golden (1946-1968)", "Modern (1969+)")
     ),
     height_fct = factor(
       if_else(height >= 72, ">=6 feet", "<6 feet"), 
@@ -188,13 +221,15 @@ person_3 <- person_2 %>%
   )
 ```
 
-The BMI bins in my data include values outside the range of the Authors' study and row counts are so low for some that it is advisable to lump some levels. I'm also unable to calculate the BMI for 55 players due to a missing height and/or weight. 
+The BMI bins in the **Lahman** data include values outside the range of the Authors' study. Their row counts are so low that it is advisable to lump levels. The **Lahman** data also has insufficient information (missing height and/or weight) to calculate the BMI for 55 players. 
 
 ```{r}
-person_3 %>% count(bmi_fct)
+person_3 %>% 
+  mutate(debut_lte_2004 = if_else(debut <= 2004, "In Study", "After 2004")) %>%
+  janitor::tabyl(bmi_fct, debut_lte_2004)
 ```
 
-There are other missing values too. `height_fct` and `throws` have a few NAs.
+In addition to the missing BMI values, there are missing values in the **Lahman** data for height and handedness.
 
 ```{r}
 person_3 %>%
@@ -202,9 +237,9 @@ person_3 %>%
   summary()
 ```
 
-For `bmi_fct`, I'll expand Normal to include the one underweight fellow, and Obese Class I to include the 7 Class II and 1 Class III players. As for what to do with the 55 players of Unknown BMI, I'll use Multivariate Imputations by Chained Equations (MICE) to impute values. I'll use it to classify height and throws too.
+I managed the `bmi_fct` levels by expanding Normal to include the one Underweight player, and Obese Class I to include the seven Obese Class II players and one Obese Class III player. For the 55 players of unknown BMI, I used Multivariate Imputations by Chained Equations (MICE) to impute values. I also used it to impute height and handedness.
 
-```{r}
+```{r warning=FALSE}
 set.seed(2020)
 
 mice_0 <- person_3 %>%
@@ -217,24 +252,23 @@ person <- data.frame(person_3,
                      height_mice = mice_0$height,
                      throws_mice = mice_0$throws) %>%
   mutate(
+    # Collapse BMI into three levels.
     bmi_fct_2 = case_when(
-      bmi_mice < 18.5 ~ "Underweight (<18.5)",
-      bmi_mice >= 18.5 & bmi_mice < 25.0 ~ "Normal (18.5 - <25.0)",
-      bmi_mice >= 25.0 & bmi_mice < 30.0 ~ "Overweight (25.0 – <30.0)",
-      bmi_mice >= 30.0 & bmi_mice < 35.0 ~ "Obese Class I (30.0 – <35.0)",
-      bmi_mice >= 35.0 & bmi_mice < 40.0 ~ "Obese Class II (35.0 - <40.0)",
-      bmi_mice >= 40.0 & bmi_mice < 44.9 ~ "Obese Class III (40.0 - <45.0"
+      bmi_mice < 18.5 ~ "Normal",
+      bmi_mice >= 18.5 & bmi_mice < 25.0 ~ "Normal",
+      bmi_mice >= 25.0 & bmi_mice < 30.0 ~ "Overweight",
+      bmi_mice >= 30.0 & bmi_mice < 35.0 ~ "Obese",
+      bmi_mice >= 35.0 & bmi_mice < 40.0 ~ "Obese",
+      bmi_mice >= 40.0 & bmi_mice < 44.9 ~ "Obese"
     ),
-    bmi_fct_2 = fct_recode(
-      bmi_fct_2, 
-      `Normal (18.5 - <25.0)` = "Underweight (<18.5)",
-      `Obese Class I (30.0 – <35.0)` = "Obese Class II (35.0 - <40.0)",
-      `Obese Class I (30.0 – <35.0)` = "Obese Class III (40.0 - <45.0"
-    ),
-    height_fct_2 = if_else(height_mice >= 72, ">=6 feet", "<6 feet"),
+    bmi_fct_2 = fct_relevel(bmi_fct_2, "Normal", "Overweight", "Obese"),
+    height_fct_2 = factor(if_else(height_mice >= 72, ">=6 feet", "<6 feet"),
+                          levels = c("<6 feet", ">=6 feet")),
     throws_2 = throws_mice
   )
+```
 
+```{r include=FALSE}
 # 30 / 55 estimated as Normal weight.
 person %>%  
   filter(is.na(bmi)) %>%
@@ -260,7 +294,7 @@ person %>%
 
 MICE estimated a little more than half the missing BMIs would be in the Normal range, the rest Overweight. The new BMI distribution is more more aligned with the Authors, and is compatible with regression algorithms. It estimated 15 of 24 missing heights to be under 6 feet, and 14 of 15 missing handedness to be right-handed.
 
-The authors report the highest recorded BMI was for Calvin Pickering (32.61). The Lahman database reports a bmi of 33.55 for Calvin, ranking him sixth heaviest among players debuting up to 2004. Dmitri Young topped the list. Dmitri is shorter and heavier than Calvin, and debuted two years earlier, so perhaps he put on a lot of weight over his career and Lahman's database captures the more recent value.
+The Authors reported that the highest recorded BMI was for Calvin Pickering (32.61). The **Lahman** data reports a BMI of 33.56 for Pickering, ranking him sixth heaviest among players debuting up to 2004. Dmitri Young topped the list at 37.87. Young is shorter and heavier than Pickering. Perhaps Young put on weight over his career and the **Lahman** data captures the more recent value.
 
 ```{r}
 person %>% 
@@ -268,14 +302,16 @@ person %>%
   arrange(desc(bmi_mice)) %>% 
   head(10) %>%
   mutate(rank = row_number()) %>%
-  select(rank, nameFirst, nameLast, debut, weight, height, bmi_mice, bmi_fct_2) %>%
+  select(rank, nameFirst, nameLast, debut, weight, height, bmi = bmi_mice, bmi_fct_2) %>%
   flextable::flextable() %>%
+  flextable::colformat_double(j = 7, digits = 2) %>%
   flextable::autofit() %>%
   flextable::theme_vanilla() %>%
-  flextable::bg(i = ~ nameLast == "Pickering", bg = "lightgoldenrod")
+  flextable::bg(i = ~ nameLast == "Pickering", bg = "lightgoldenrod") %>%
+  flextable::set_caption("Top 10 BMIs in Lahman data, debut dates <= 2004.")
 ```
 
-Not to be morbid, but it is interesting to consider the data updated through 2021. Calvin is way down the ranking at 22 now, and Dmitri Young has fallen to fourth. The highest BMI belongs to Alejandro Kirk at 40.3. His entry in [Baseball Reference](https://www.baseball-reference.com/players/k/kirkal01.shtml) lists him at 245 pounds while the Lahman database lists 265 pounds. Looking at photos, his weight does seem to vary. 
+It is interesting to consider the data updated through 2021. 
 
 ```{r}
 person %>% 
@@ -283,14 +319,34 @@ person %>%
   arrange(desc(bmi_mice)) %>% 
   head(30) %>%
   mutate(rank = row_number()) %>%
-  select(rank, nameFirst, nameLast, debut, weight, height, bmi_mice, bmi_fct_2) %>%
+  select(rank, nameFirst, nameLast, debut, weight, height, bmi = bmi_mice, bmi_fct_2) %>%
   flextable::flextable() %>%
+  flextable::colformat_double(j = 7, digits = 2) %>%
   flextable::autofit() %>%
   flextable::theme_vanilla() %>%
-  flextable::bg(i = ~ nameLast %in% c("Young", "Pickering"), bg = "lightgoldenrod")
+  flextable::bg(i = ~ nameLast %in% c("Young", "Pickering"), bg = "lightgoldenrod") %>%
+  flextable::set_caption("Top 30 BMIs in Lahman data, any debut date.")
 ```
 
-From the tables above, and from common knowledge, BMI is likely to be associated with debut date. The plot below confirms that. BMIs began to increase in 1990 and peaked in 2014. Perhaps the BMIs are related to sports nutrition and performance enhancing substances.
+Pickering falls way down the rankings to 22nd, and Dmitri Young falls to fourth. The highest BMI belongs to Alejandro Kirk at 40.29. His entry in [Baseball Reference](https://www.baseball-reference.com/players/k/kirkal01.shtml) lists him at 245 pounds while the **Lahman** data lists 265 pounds. Looking at photos, his weight does seem to vary. 
+
+:::: {style="display: grid; grid-template-columns: 1fr 1fr; grid-column-gap: 10px;"}
+
+::: {}
+
+![](../data/kirk_smaller.jpg)
+
+:::
+
+::: {}
+
+![](../data/kirk_bigger.jpg)
+
+:::
+
+::::
+
+A plot of the relationship between BMI and MLB debut year shows BMIs began to increase in 1990 and peaked in 2014. Perhaps the increasing BMIs are related to sports nutrition and performance enhancing substances rather than body fat. Players debuting after 2004 are colored blue for reference. The updated data has many more overweight players.
 
 ```{r warning=FALSE, message=FALSE}
 person %>%
@@ -298,11 +354,12 @@ person %>%
   ggplot(aes(x = debut, y = bmi_mice)) +
   geom_point(aes(color = post2004), alpha = 0.2) +
   geom_smooth(color = "gray40") + 
+  geom_vline(xintercept = ym(201401), linetype = 2, color = "gray60") +
   theme_light() +
   labs(title = "BMIs increased after 1990 and peaked in 2014.")
 ```
 
-Discrete time models are fitted to a person-year data set, with one row per player per year from debut to year of death (or censor).
+Discrete time models are fitted to person-year data, with one row per person per year from debut year to the year of death (or censor).
 
 ```{r}
 person_year_0 <-
@@ -316,27 +373,14 @@ person_year_0 <-
   filter(debutYear <= yr, coalesce(deathYear, 9999) >= yr)
 ```
 
-The Author's data set included 241,218 person-years for 1902 - 2004 (103 years) with 6,772 players and 3,030 deaths. I don't quite match, but I'm not far off considering I'm using a different data source. It may be worth noting that I have 55 more players and 37 more deaths, and I have *less* person-years. The smaller number of person-years may indicate that my data source identified deaths that the Authors' source was unaware of.
-
-```{r collapse=TRUE}
-# Person-Years: 241,218 (Authors) vs 239,678 (me). I have 1,540 less person-years.
-person_year_0 %>% filter(yr <= 2004) %>% nrow()
-
-# Distinct Players: 6,772 (Authors) vs 6,827 (me). I have 55 more players.
-person_year_0 %>% filter(yr <= 2004) %>% pull(playerID) %>% n_distinct()
-
-# Death Events: 3,030 (Authors) vs 3,067 (me). I have 37 more deaths.
-person_year_0 %>% filter(deathYear <= 2004) %>% pull(playerID) %>% n_distinct()
-```
-
-## Variables
+The Author's data set included 241,218 person-years for 1902 - 2004 (103 years) with 6,772 players and 3,030 deaths. The data derived from **Lahman** do not quite match, but are close. It includes `r person_year_0 %>% filter(yr <= 2004) %>% nrow() %>% comma(1)` person-years with `r person_year_0 %>% filter(yr <= 2004) %>% pull(playerID) %>% n_distinct() %>% comma(1)` distinct players and `r person_year_0 %>% filter(deathYear <= 2004) %>% pull(playerID) %>% n_distinct() %>% comma(1)` deaths. It is worth noting that the data derived from **Lahman** has more players and deaths, yet *less* person-years. The smaller number of person-years may indicate that the **Lahman** data identifies more deaths than the Authors' source.
 
 The Authors define a few other variables for their regression analysis.
 
-* `age` = number of years between date of birth and Jan 1 of year.
-* `age_bin` = five-year age groups from 20-24 to 85+.
-* `period_bin` = pre-1910, ten-year intervals from 1910 to 1970, and 1970-2004.
-* `status` = 0 alive/censored, 1 dead
+* `age` = Number of years between date of birth and Jan 1 of person-year.
+* `age_bin` = Five-year age groups from 20-24 to 85+.
+* `period_bin` = Year intervals, Pre-1910, ten-year intervals 1910 to 1970, and 1970+.
+* `status` = 0 alive or censored, 1 dead.
 
 ```{r}
 person_year <- person_year_0 %>%
@@ -352,15 +396,12 @@ person_year <- person_year_0 %>%
                       right = FALSE),
     status = if_else(deathYear == yr, 1L, 0L)
   )
+
+# The following table summarizes the finalized data set used in the analysis, 
+# including the post 2004 data that are used in the update.
+person_year %>%
+  skimr::skim()
 ```
-
-Here is a summary of the finalized data set.
-
-```{r}
-skimr::skim(person_year)
-```
-
-Table 1 presents the descriptive statistics of the covariates based on the pooled person-years. It is directly comparable to the Authors' [Table 1](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2743321/table/T1/) (external). Both data sets have the most person-years at age group [30, 35), but my data set has more person-years for younger people, aged < 45 years. I also have relatively more person-year records for the periods before 1940 and the Early (1902 - 1945) debut year cohort. Consistent with the original study, 41 percent of players-years are classified as overweight and .3 percent are obese. 54 percent are less than six feet tall (54.81 in Onge et al), and 86 percent are right-handed. 26 percent of players played 10 years or more (23.54 in Onge et al). I do not have career rating or first-year rating measures in my data set.
 
 ```{r}
 t1 <- person_year %>%
@@ -397,7 +438,13 @@ t2 <- person_year %>%
     include = c(cohort, height_fct, bmi_fct, 
                 career_length_fct, throws, status)
   )
+```
 
+Table 1 presents the descriptive statistics of the modeling covariates based on the pooled person-years. It is directly comparable to the Authors' [Table 1](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2743321/table/T1/) (external). Both data sets have the most person-years at age group [30, 35), but the **Lahman**-based data has more person-years for younger people, aged < 45 years, and relatively more person-year records for the periods before 1940 and the Early (1902 - 1945) debut year cohort. Whereas 4.23% of Authors' rows are in the lowest age group bin, [0,25), the **Lahman**-based data has many more, `r gtsummary::inline_text(t1, variable = age_bin, level = "[0,25)")`. Conversely, while 1.11% of the Authors' rows are in the highest age group, [85,Inf), the **Lahman**-based data has `r gtsummary::inline_text(t1, variable = age_bin, level = "[85,Inf)")`. Table 1 includes a second column showing distinct player characteristics. It is evident that there are more records associated with earlier players. For example, while `r gtsummary::inline_text(t2, variable = cohort, level = "Early (1902-1945)")` of players debuted between 1902 and 1945 (Early cohort), they comprise `r gtsummary::inline_text(t1, variable = cohort, level = "Early (1902-1945)")` of the player-year rows.
+
+Consistent with the Authors' study, 41 percent of players-years in the **Lahman**-based data are classified as overweight and 0.3 percent of players-years are classified as obese. 54 percent of players-years are less than six feet tall (54.81 in Authors' data), and 86 percent are right-handed. (same in Authors' data). 26 percent of players played 10 years or more (23.54 in Authors' data). The **Lahman**-based data does not have career rating or first-year rating measures, so those attributes are not included.
+
+```{r}
 gtsummary::tbl_merge(list(t1, t2), tab_spanner = c("Person-Years", "Distinct Persons")) %>%
   gtsummary::as_flex_table() %>% 
   flextable::theme_vanilla() %>%
@@ -405,39 +452,53 @@ gtsummary::tbl_merge(list(t1, t2), tab_spanner = c("Person-Years", "Distinct Per
   flextable::set_caption("Table 1. Percentage of selected characteristics, MLB players, 1902-2004.")
 ```
 
-My Age Group distribution has many more records at the lowest bin, [0,25), `r gtsummary::inline_text(t1, variable = age_bin, level = "[0,25)")`, compared to 4.23% for the Authors. I have only `r gtsummary::inline_text(t1, variable = age_bin, level = "[85,Inf)")` records in the highest bin, [85,Inf) while the Authors have 1.11%.
+# Method
 
-I added a second column to Table 1 showing distinct player characteristics. It is evident that there are more records associated with earlier players. For example, while `r gtsummary::inline_text(t2, variable = cohort, level = "Early (1902–1945)")` of players debuted between 1902 and 1945 (Early cohort), they comprise `r gtsummary::inline_text(t1, variable = cohort, level = "Early (1902–1945)")` of the player-year rows.
+The Authors used logistic regression to estimate a discrete time hazards model for risk of death between the debut date and the end of the follow-up period. They used debut date for the start date rather than the birth date because by definition all players have survived until their debut. They used a discrete time hazards model instead of a Cox proportional hazards model because it enables the calculation of life tables with the covariate estimates.
 
-## Method
-
-Saint Onge et al. ([2008](#SaintOnge2008)) uses logistic regression to estimate a discrete time hazards model for risk of death between the debut date and the end of the follow-up period. They explain that they start with debut date rather than birth date because by definition all players have survived until their debut. The advantage of using a discrete time hazards model over a Cox proportional hazards model is that enables the calculation of life tables with the covariate estimates.
-
-A discrete time logistic regression can be fit with either logit link function or a complementary log-log link function. My [supervised maching learning notes](https://bookdown.org/mpfoley1973/supervised-ml/survival-analysis.html#discrete-time) compare the link functions. The logit link models the hazard odds ratio, and the complementary log-log link models the hazard ratio. The complementary log-log link is directly comparable to a Cox proportional hazards model. I'm not sure which link function the Authors used. I tried both, and achieved very similar coefficient measures. The settled on the complementary log-log link.
+A discrete time logistic regression can be fit with either logit link function or a complementary log-log link function^[See [my notes](https://bookdown.org/mpfoley1973/supervised-ml/survival-analysis.html#discrete-time), and [Bayesium Analytics](http://bayesium.com/which-link-function-logit-probit-or-cloglog/))]. The coefficients in a logit link model are the log of the hazard *odds* ratio, and in the complementary log-log link model they are the log hazard ratio. The coefficients in the complementary log-log link are directly comparable to those in a Cox proportional hazards model. I'm not sure which link function the Authors used. I tried both and achieved similar coefficient estimates. I settled on the complementary log-log link.
 
 ```{r}
 person_year_2004 <- person_year %>% filter(yr <= 2004)
 
-mdl_1 <- glm(status ~ age_bin, 
-             data = person_year_2004, family = binomial(link = "cloglog"))
-mdl_2 <- glm(status ~ age_bin + period_bin, 
-             data = person_year_2004, family = binomial(link = "cloglog"))
-mdl_3 <- glm(status ~ age_bin + period_bin + cohort, 
-             data = person_year_2004, family = binomial(link = "cloglog"))
-mdl_4 <- glm(status ~ age_bin + period_bin + bmi_fct_2, 
-             data = person_year_2004, family = binomial(link = "cloglog"))
-mdl_5 <- glm(status ~ age_bin + period_bin + height_fct_2, 
-             data = person_year_2004, family = binomial(link = "cloglog"))
-mdl_6 <- glm(status ~ age_bin + period_bin + throws_2, 
-             data = person_year_2004, family = binomial(link = "cloglog"))
-# not mdl_7 or mdl_8 because I do not have player ratings.
-mdl_9 <- glm(status ~ age_bin + period_bin + career_length_fct, 
-             data = person_year_2004, family = binomial(link = "cloglog"))
+# Logistic regression (lr) formulas.
+fmla_1_lr <- status ~ age_bin
+fmla_2_lr <- status ~ age_bin + period_bin
+fmla_3_lr <- status ~ age_bin + period_bin + cohort
+fmla_4_lr <- status ~ age_bin + period_bin + bmi_fct_2
+fmla_5_lr <- status ~ age_bin + period_bin + height_fct_2
+fmla_6_lr <- status ~ age_bin + period_bin + throws_2
+fmla_9_lr <- status ~ age_bin + period_bin + career_length_fct
+
+mdl_1_lr_2004 <- glm(fmla_1_lr, data = person_year_2004, family = binomial(link = "logit"))
+mdl_2_lr_2004 <- glm(fmla_2_lr, data = person_year_2004, family = binomial(link = "cloglog"))
+mdl_3_lr_2004 <- glm(fmla_3_lr, data = person_year_2004, family = binomial(link = "cloglog"))
+mdl_4_lr_2004 <- glm(fmla_4_lr, data = person_year_2004, family = binomial(link = "cloglog"))
+mdl_5_lr_2004 <- glm(fmla_5_lr, data = person_year_2004, family = binomial(link = "cloglog"))
+mdl_6_lr_2004 <- glm(fmla_6_lr, data = person_year_2004, family = binomial(link = "cloglog"))
+# No player ratings, so no mdl_7 or mdl_8.
+mdl_9_lr_2004 <- glm(fmla_9_lr, data = person_year_2004, family = binomial(link = "cloglog"))
 ```
+
+```{r include=FALSE}
+equatiomatic::extract_eq(mdl_1_lr_2004, wrap = TRUE, intercept = "beta")
+```
+
+The Authors fit the following models. Models 7 and 8 are not fitted in this analysis because the **Lahman** data does not include player ratings. 
+
+* **Model 1**: $\log\left[ - \log (1 - P( \operatorname{status} = \operatorname{1} ) ) \right] = \operatorname{age\_bin}$
+* **Model 2**: $\log\left[ - \log (1 - P( \operatorname{status} = \operatorname{1} ) ) \right] = \operatorname{age\_bin} + \operatorname{period\_bin}$
+* **Model 3**: $\log\left[ - \log (1 - P( \operatorname{status} = \operatorname{1} ) ) \right] = \operatorname{age\_bin} + \operatorname{period\_bin} + \operatorname{cohort}$
+* **Model 4**: $\log\left[ - \log (1 - P( \operatorname{status} = \operatorname{1} ) ) \right] = \operatorname{age\_bin} + \operatorname{period\_bin + \operatorname{bmi\_fct\_2}}$
+* **Model 5**: $\log\left[ - \log (1 - P( \operatorname{status} = \operatorname{1} ) ) \right] = \operatorname{age\_bin} + \operatorname{period\_bin} + \operatorname{height\_fct\_2}$
+* **Model 6**: $\log\left[ - \log (1 - P( \operatorname{status} = \operatorname{1} ) ) \right] = \operatorname{age\_bin} + \operatorname{period\_bin} + \operatorname{throws\_2}$
+* **Model 7**: $\log\left[ - \log (1 - P( \operatorname{status} = \operatorname{1} ) ) \right] = \operatorname{age\_bin} + \operatorname{period\_bin} + \operatorname{first\_year\_rating}$
+* **Model 8**: $\log\left[ - \log (1 - P( \operatorname{status} = \operatorname{1} ) ) \right] = \operatorname{age\_bin} + \operatorname{period\_bin} + \operatorname{career\_rating}$
+* **Model 9**: $\log\left[ - \log (1 - P( \operatorname{status} = \operatorname{1} ) ) \right] = \operatorname{age\_bin} + \operatorname{period\_bin} + \operatorname{career\_length\_fct}$
 
 # Results
 
-Table 2 presents the model coefficient estimates for each model. Models 7 and 8 are missing because I do not have the player ratings to fit them. Table is is directly comparable to the Authors' [Table 2](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2743321/table/T2/) (external). 
+Table 2 presents the coefficient estimates for each model. Table 2 is is directly comparable to the Authors' [Table 2](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2743321/table/T2/) (external). 
 
 ```{r}
 astercize <- function(e, p) {
@@ -451,13 +512,13 @@ astercize <- function(e, p) {
 }
 
 bind_rows(
-  `Model 1` = tidy(mdl_1, exponentiate = FALSE),
-  `Model 2` = tidy(mdl_2, exponentiate = FALSE),
-  `Model 3` = tidy(mdl_3, exponentiate = FALSE),
-  `Model 4` = tidy(mdl_4, exponentiate = FALSE),
-  `Model 5` = tidy(mdl_5, exponentiate = FALSE),
-  `Model 6` = tidy(mdl_6, exponentiate = FALSE),
-  `Model 9` = tidy(mdl_9, exponentiate = FALSE),
+  `Model 1` = tidy(mdl_1_lr_2004, exponentiate = FALSE),
+  `Model 2` = tidy(mdl_2_lr_2004, exponentiate = FALSE),
+  `Model 3` = tidy(mdl_3_lr_2004, exponentiate = FALSE),
+  `Model 4` = tidy(mdl_4_lr_2004, exponentiate = FALSE),
+  `Model 5` = tidy(mdl_5_lr_2004, exponentiate = FALSE),
+  `Model 6` = tidy(mdl_6_lr_2004, exponentiate = FALSE),
+  `Model 9` = tidy(mdl_9_lr_2004, exponentiate = FALSE),
   .id = "model_num"
 ) %>%
   mutate(lbl = map2_chr(scales::comma(estimate, .01), p.value, astercize)) %>%
@@ -466,14 +527,14 @@ bind_rows(
   flextable::align(j = 2:8, align = "right") %>%
   flextable::theme_zebra() %>%
   flextable::autofit() %>%
-  flextable::set_caption("Table 2. MLB hazard odds ratio coeficients on mortality, 1902 - 2004.")
+  flextable::set_caption("Table 2. MLB hazard log odds ratio coeficients on mortality, 1902 - 2004.")
 ```
 
-Model 1 shows that the odds of death increase with age. Players aged 40–44 are exp(`r tidy(mdl_1, exponentiate = FALSE) %>% filter(term == "age_bin[40,45)") %>% pull(estimate) %>% comma(.01)`) = `r tidy(mdl_1, exponentiate = TRUE) %>% filter(term == "age_bin[40,45)") %>% pull(estimate) %>% comma(.01)` times as likely to die over the follow-up period as players aged 20–24 (Authors report exp(1.32) = 3.74), those aged 50–54 are exp(`r tidy(mdl_1, exponentiate = FALSE) %>% filter(term == "age_bin[50,55)") %>% pull(estimate) %>% comma(.01)`) = `r tidy(mdl_1, exponentiate = TRUE) %>% filter(term == "age_bin[50,55)") %>% pull(estimate) %>% comma(.01)` times as likely to die (Authors report exp(2.39) = 10.9), and players aged 70–74 are exp(`r tidy(mdl_1, exponentiate = FALSE) %>% filter(term == "age_bin[70,75)") %>% pull(estimate) %>% comma(.1)`) = `r tidy(mdl_1, exponentiate = TRUE) %>% filter(term == "age_bin[70,75)") %>% pull(estimate) %>% comma(.1)` times as likely to die (Authors report exp(4.00) = 54.6). 
+Model 1 shows that the odds of death increase with age. Players aged 40–44 are exp(`r tidy(mdl_1_lr_2004, exponentiate = FALSE) %>% filter(term == "age_bin[40,45)") %>% pull(estimate) %>% comma(.01)`) = `r tidy(mdl_1_lr_2004, exponentiate = TRUE) %>% filter(term == "age_bin[40,45)") %>% pull(estimate) %>% comma(.01)` times as likely to die over the follow-up period as players aged 20–24 (Authors report exp(1.32) = 3.74), those aged 50–54 are exp(`r tidy(mdl_1_lr_2004, exponentiate = FALSE) %>% filter(term == "age_bin[50,55)") %>% pull(estimate) %>% comma(.01)`) = `r tidy(mdl_1_lr_2004, exponentiate = TRUE) %>% filter(term == "age_bin[50,55)") %>% pull(estimate) %>% comma(.01)` times as likely to die (Authors report exp(2.39) = 10.9), and players aged 70–74 are exp(`r tidy(mdl_1_lr_2004, exponentiate = FALSE) %>% filter(term == "age_bin[70,75)") %>% pull(estimate) %>% comma(.01)`) = `r tidy(mdl_1_lr_2004, exponentiate = TRUE) %>% filter(term == "age_bin[70,75)") %>% pull(estimate) %>% comma(.01)` times as likely to die (Authors report exp(4.00) = 54.6). My Model 1 estimated slightly higher mortality risk for all age groups.
 
-Model 2 shows that, adjusting for age, more recent calendar periods are associated with lower risks of death. The greatest declines in mortality took place between the 1920–1929 and 1930–1939 periods, exp(`r tidy(mdl_2, exponentiate = FALSE) %>% filter(term == "period_bin[1920,1930)") %>% pull(estimate) %>% comma(.01)`) = `r tidy(mdl_2, exponentiate = TRUE) %>% filter(term == "period_bin[1920,1930)") %>% pull(estimate) %>% comma(.01)` to exp(`r tidy(mdl_2, exponentiate = FALSE) %>% filter(term == "period_bin[1930,1940)") %>% pull(estimate) %>% comma(.01)`) = `r tidy(mdl_2, exponentiate = TRUE) %>% filter(term == "period_bin[1930,1940)") %>% pull(estimate) %>% comma(.01)` (Authors report exp(-.54) = 0.58 to exp(-1.08) = 0.34), and between the 1960–1969 and 1970–2004 periods, exp(`r tidy(mdl_2, exponentiate = FALSE) %>% filter(term == "period_bin[1960,1970)") %>% pull(estimate) %>% comma(.01)`) = `r tidy(mdl_2, exponentiate = TRUE) %>% filter(term == "period_bin[1960,1970)") %>% pull(estimate) %>% comma(.01)` to exp(`r tidy(mdl_2, exponentiate = FALSE) %>% filter(term == "period_bin[1970,Inf)") %>% pull(estimate) %>% comma(.01)`) = `r tidy(mdl_2, exponentiate = TRUE) %>% filter(term == "period_bin[1970,Inf)") %>% pull(estimate) %>% comma(.01)`) (Authors report exp(-1.47) = 0.23 to exp(-1.97) = 0.14). 
+Model 2 shows that, adjusting for age, more recent calendar periods are associated with lower risks of death. The greatest declines in mortality took place between the 1920–1929 and 1930–1939 periods, exp(`r tidy(mdl_2_lr_2004, exponentiate = FALSE) %>% filter(term == "period_bin[1920,1930)") %>% pull(estimate) %>% comma(.01)`) = `r tidy(mdl_2_lr_2004, exponentiate = TRUE) %>% filter(term == "period_bin[1920,1930)") %>% pull(estimate) %>% comma(.01)` to exp(`r tidy(mdl_2_lr_2004, exponentiate = FALSE) %>% filter(term == "period_bin[1930,1940)") %>% pull(estimate) %>% comma(.01)`) = `r tidy(mdl_2_lr_2004, exponentiate = TRUE) %>% filter(term == "period_bin[1930,1940)") %>% pull(estimate) %>% comma(.01)` (Authors report exp(-.54) = 0.58 to exp(-1.08) = 0.34), and between the 1960–1969 and 1970–2004 periods, exp(`r tidy(mdl_2_lr_2004, exponentiate = FALSE) %>% filter(term == "period_bin[1960,1970)") %>% pull(estimate) %>% comma(.01)`) = `r tidy(mdl_2_lr_2004, exponentiate = TRUE) %>% filter(term == "period_bin[1960,1970)") %>% pull(estimate) %>% comma(.01)` to exp(`r tidy(mdl_2_lr_2004, exponentiate = FALSE) %>% filter(term == "period_bin[1970,Inf)") %>% pull(estimate) %>% comma(.01)`) = `r tidy(mdl_2_lr_2004, exponentiate = TRUE) %>% filter(term == "period_bin[1970,Inf)") %>% pull(estimate) %>% comma(.01)`) (Authors report exp(-1.47) = 0.23 to exp(-1.97) = 0.14). My Model 2 estimated slightly smaller association between mortality risk and calendar period. 
 
-The Authors' Model 3 shows that the coefficients for period and age are reduced but remain strong predictors of mortality after adjusting for the cohort of debut. However my fit shows that the Modern debut era is significantly *positively* associated with mortality risk, exp(`r tidy(mdl_3, exponentiate = FALSE) %>% filter(term == "cohortModern (1969+)") %>% pull(estimate) %>% comma(.01)`) = `r tidy(mdl_3, exponentiate = TRUE) %>% filter(term == "cohortModern (1969+)") %>% pull(estimate) %>% comma(.01)` while the period predictors are more *magnified*. I attribute this to the fact that the debut era is positively correlated with the period bins.
+The Authors' Model 3 shows that the coefficients for period and age are reduced but remain strong predictors of mortality after adjusting for the cohort of debut. My fit shows that the Modern debut era is significantly *positively* associated with mortality risk, exp(`r tidy(mdl_3_lr_2004, exponentiate = FALSE) %>% filter(term == "cohortModern (1969+)") %>% pull(estimate) %>% comma(.01)`) = `r tidy(mdl_3_lr_2004, exponentiate = TRUE) %>% filter(term == "cohortModern (1969+)") %>% pull(estimate) %>% comma(.01)` while the period predictors are *magnified*. I attribute this to the fact that the debut era is positively correlated with the period bins. In the plot below, all Modern era player-year records are (by definition) in the 1970+ period.
 
 ```{r}
 person_year_2004 %>%
@@ -486,17 +547,15 @@ person_year_2004 %>%
        title = "Period and Cohort (Debut Era) Association")
 ```
 
-Model 4 shows that obese class 1 players are exp(`r tidy(mdl_4, exponentiate = FALSE) %>% filter(term == "bmi_fctObese Class I (30.0 – <35.0)") %>% pull(estimate) %>% comma(.01)`) = `r tidy(mdl_4, exponentiate = TRUE) %>% filter(term == "bmi_fctObese Class I (30.0 – <35.0)") %>% pull(estimate) %>% comma(.01)` times as likely to die as players of normal weight (Authors report exp(.57) = 1.77). The effect was not significant at the .05 level, but it reduced the magnitude of the period bins.
+Models 4, 5, and 6 estimate insignificant (at .05 level) associations between risk and obesity (exp(`r tidy(mdl_4_lr_2004, exponentiate = FALSE) %>% filter(term == "bmi_fct_2Obese") %>% pull(estimate) %>% comma(.01)`) = `r tidy(mdl_4_lr_2004, exponentiate = TRUE) %>% filter(term == "bmi_fct_2Obese") %>% pull(estimate) %>% comma(.01)`, Authors report exp(.57) = 1.77), height over six feet (exp(`r tidy(mdl_5_lr_2004, exponentiate = FALSE) %>% filter(term == "height_fct_2>=6 feet") %>% pull(estimate) %>% comma(.01)`) = `r tidy(mdl_5_lr_2004, exponentiate = TRUE) %>% filter(term == "height_fct_2>=6 feet") %>% pull(estimate) %>% comma(.01)`, Authors report exp(.03) = 1.03), and left-handedness (exp(`r tidy(mdl_6_lr_2004, exponentiate = FALSE) %>% filter(term == "throws_2Left Handed") %>% pull(estimate) %>% comma(.01)`) = `r tidy(mdl_6_lr_2004, exponentiate = TRUE) %>% filter(term == "throws_2Left Handed") %>% pull(estimate) %>% comma(.01)`, Authors report exp(-.02) = 0.98).
 
-Similarly, model 5 shows players over six feet have a slight increase in mortality risk, `r tidy(mdl_5, exponentiate = TRUE) %>% filter(term == "height_fct>=6 feet") %>% pull(estimate) %>% comma(.1)` (exp(0.08)), but that relationship was not significant in Saint Onge et al. Left-handedness showed nearly zero effect and was not significant in either my model 6 or in Saint Onge et al.
+Finally, those who play for 10 or more years have (1 - exp(`r tidy(mdl_9_lr_2004, exponentiate = FALSE) %>% filter(term == "career_length_fct10+ years") %>% pull(estimate) %>% comma(.01)`)) * 100 = `r tidy(mdl_9_lr_2004, exponentiate = TRUE) %>% filter(term == "career_length_fct10+ years") %>% mutate(lwr = (1 - estimate) * 100) %>% pull(lwr) %>% comma(1)` percent lower odds of death over the follow-up period than those who have shorter careers (Model 9). The Authors repor a 14 percent lower odds.
 
-Finally, those who play for 10 or more years have `r tidy(mdl_9, exponentiate = TRUE) %>% filter(term == "career_length_fct10+ years") %>% mutate(lwr = (1 - estimate) * 100) %>% pull(lwr) %>% comma(1)`) percent lower odds of death ((1 - exp(-.13)) * 100) over the follow-up period than those who have shorter careers (Model 9). Saint Onge et al reported a 14 percent lower odds.
+Table 3 presents player life expectancy for the most recent period, 1970-2004, based on the hazard coefficients from Model 2. Table 3 is directly comparable to the Authors' [Table 3](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2743321/table/T3/). I tried to follow the methodology presented by [Measure Evaluation](https://www.measureevaluation.org/resources/training/online-courses-and-resources/non-certificate-courses-and-mini-tutorials/population-analysis-for-planners/lesson-7.html) with further explanation from [page 442](https://www.google.com/books/edition/_/DRpWZlKIqwoC?hl=en&gbpv=1&bsq=central%20death%20rate) of **The Methods and Materials of Demography** (Shryock, et al, [1980](#Shryock1980)), but was not quite successful. Some notes on column definitions:
 
-Table 3 presents player life expectancy for the most recent period, 1970-2004, based on the hazard coefficients from model 2. Table 3 is directly comparable to [Table 3](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2743321/table/T3/) of Saint Onge et al. I didn't quite figure out how to reproduce it, but followed the methodology presented by [Measure Evaluation](https://www.measureevaluation.org/resources/training/online-courses-and-resources/non-certificate-courses-and-mini-tutorials/population-analysis-for-planners/lesson-7.html) with further explanation from [page 442](https://www.google.com/books/edition/_/DRpWZlKIqwoC?hl=en&gbpv=1&bsq=central%20death%20rate) of **The Methods and Materials of Demography** (Shryock, et al, [1980](#Shryock1980)). Some notes on column definitions:
-
-* **mx** is the age-specific central death rate, $m_x = 1 / (1 + e^{-z})$ where *z* is sum of the model coefficients from model 2 for period 1970 - 2004: intercept = `r coef(mdl_2)["(Intercept)"] %>% comma(.01)`, period 1970 - 2004 = `r coef(mdl_2)["period_bin[1970,Inf)"] %>% comma(.01)` and beta = [value from age group]. E.g., $m_{25-30}$ = `r comma(1 / (1 + exp(-(coef(mdl_2)["(Intercept)"] + coef(mdl_2)["period_bin[1970,Inf)"] + coef(mdl_2)["age_bin[25,30)"]))), .0001)`, or  $1 / (1 + e^{-(`r coef(mdl_2)["(Intercept)"] %>% comma(.01)` + `r coef(mdl_2)["period_bin[1970,Inf)"] %>% comma(.01)` + `r coef(mdl_2)["age_bin[25,30)"] %>% comma(.01)`)})$.
+* **mx** is the age-specific central death rate (the annual mortality rate), $m_x = 1 / (1 + e^{-z})$ where *z* is sum of the model coefficients from model 2 for period 1970 - 2004: intercept = `r coef(mdl_2_lr_2004)["(Intercept)"] %>% comma(.01)`, period 1970 - 2004 = `r coef(mdl_2_lr_2004)["period_bin[1970,Inf)"] %>% comma(.01)` and beta = [value from age group]. E.g., $m_{25-30} = 1 / (1 + e^{-(`r coef(mdl_2_lr_2004)["(Intercept)"] %>% comma(.01)` + `r coef(mdl_2_lr_2004)["period_bin[1970,Inf)"] %>% comma(.01)` + `r coef(mdl_2_lr_2004)["age_bin[25,30)"] %>% comma(.01)`)}) = `r comma(1 / (1 + exp(-(coef(mdl_2_lr_2004)["(Intercept)"] + coef(mdl_2_lr_2004)["period_bin[1970,Inf)"] + coef(mdl_2_lr_2004)["age_bin[25,30)"]))), .0001)`$.
 * **nQx** is the five-year mortality rate, given by $\frac{5 \cdot m_x}{1 + g_x m_x}$ where $g_x$ is a factor measuring the average number of years lived within the age group and is initially assumed by be 2.5 years. This is from equation 25 in Shryock et al ([1980](#Shryock1980)]).
-* **1 - nQx** is the complement of nQx, an intermediate calc. It is the five-year survival rate.
+* **1 - nQx** is the complement of nQx, an intermediate calc. It is the five-year survival rate. *This is where I depart from the Authors. They report 1.0000 for the age 85+ group*.
 * **cum(.)** is the cumulative product of 1 - nQx. Whereas 1 - nQx is an instantaneous probability, cum(.) is a cumulative probability. It is the probability of living to that age, then living another five years.
 * **lx** is the number of persons alive at the beginning of the age interval. It equals the prior cum(.) * 100,000. The 100,000 normalizes the presentation to a hypothetical population of 100,000.
 * **ndx** is the number of persons dying during the age interval, lx * nQx.
@@ -505,17 +564,17 @@ Table 3 presents player life expectancy for the most recent period, 1970-2004, b
 * **ex** is the average remaining life time, Tx / lx.
 
 ```{r}
-tdy_2 <- mdl_2 %>% broom::tidy()
+tdy_2 <- mdl_2_lr_2004 %>% broom::tidy()
 
 life_tbl_period <- tibble(
   age_bin = rep(levels(person_year$age_bin), 8),
   age_bin_term = paste0("age_bin", age_bin),
   period_bin = map(levels(person_year$period_bin), ~rep(.x, 14)) %>% unlist(),
   period_bin_term = paste0("period_bin", period_bin),
-  intercept = coef(mdl_2)["(Intercept)"],
-  # period_bin_1970_Inf = coef(mdl_2)["period_bin[1970,Inf)"],
-  us_male_e = rep(c(53.25, 48.67, 44.10, 39.57, 35.09, 30.66, 26.37, 22.30, 18.53, 
-                 15.12, 12.05, 9.39, 7.12, 5.31), 8)
+  intercept = coef(mdl_2_lr_2004)["(Intercept)"],
+  # period_bin_1970_Inf = coef(mdl_2_lr_2004)["period_bin[1970,Inf)"],
+  us_male_e = rep(us_male_e, 8),
+  authors_e = rep(authors_e, 8)
 ) %>%
   left_join(tdy_2 %>% select(age_bin_term = term, age_bin_est = estimate), 
             by = "age_bin_term") %>%
@@ -539,7 +598,8 @@ life_tbl_period <- tibble(
   ) %>%
   ungroup() %>%
   arrange(period_bin, age_bin) %>%
-  select(period_bin, age_bin, intercept, age_bin_est, period_bin_est, mx:ex, us_male_e)
+  select(period_bin, age_bin, intercept, age_bin_est, period_bin_est, mx:ex, 
+         us_male_e, authors_e)
 
 life_flex <- function(dat) {
   dat %>%
@@ -550,12 +610,15 @@ life_flex <- function(dat) {
       # age_bin_est = "Beta",
       nQx_comp = "1 - nQx",
       nQx_cumprod = "cum(.)",
-      us_male_e = "U.S. Males"
+      us_male_e = "U.S. Males",
+      authors_e = "Authors"
     ) %>%
     flextable::colformat_double(j = c(2:5), digits = 4) %>%
     flextable::colformat_double(j = c(6:9), digits = 0, big.mark = ",") %>%
-    flextable::colformat_double(j = c(10:11), digits = 1) %>%
-    flextable::theme_zebra()
+    flextable::colformat_double(j = c(10:12), digits = 2) %>%
+    flextable::theme_zebra() %>%
+    flextable::add_header_row(values = c("", "Life Expectancies"), colwidths = c(9, 3)) %>%
+    flextable::border(j = 9, border.right = officer::fp_border(color = "gray60"))
 }
 
 life_tbl_period %>%
@@ -564,23 +627,23 @@ life_tbl_period %>%
   life_flex()
 ```
 
-Column U.S. Males is taken directly from Saint Onge et al. Table 3 in Saint Onge et al shows that players have higher life expectancies than the general U.S. male population at all ages, but the advantage diminishes with age. 20-year-old MLB players can expect to live 58.1 additional years in the period 1970 - 2004 compared to 53.3 for comparable males in the U.S. population. My Table 3 show a more modest advantage. A 20-year-old MLB player can expect to live 54.9 additional years, 1.7 more than comparable males in the U.S. population (compare to 4.8 in Saint Onge et al). The advantage diminishes, then becomes a disadvantage for 60-65 year old MLB players.
+Columns U.S. Males and Authors are taken directly from the Authors' Table 3. The Authors found higher life expectancies for players relative to the general U.S. male population at all ages, with the advantage diminishing with age. For example, from the Authors Table 3, a 20-year-old MLB players can expect to live 58.11 additional years in the period 1970 - 2004, 4.86 years more than the 53.25 years for comparable males in the U.S. population. Table 3 here shows a more modest advantage. A 20-year-old MLB player can expect to live `r life_tbl_period %>% filter(period_bin == "[1970,Inf)", age_bin == "[0,25)") %>% pull(ex) %>% comma(.01)` additional years, only `r life_tbl_period %>% filter(period_bin == "[1970,Inf)", age_bin == "[0,25)") %>% mutate(diff = ex - 53.25) %>% pull(diff) %>% comma(.01)` years more than comparable males in the U.S. population. The advantage diminishes, then becomes a *disadvantage* for 60-65 year old MLB players.
 
-Figure 1 illustrates life expectancies for calendar periods (Panel A) calculated from Model 2 in Table 2 and cohorts (Panel B) from Model 3^[Saint Onge et al say both panels are from Model 2, but that cannot be right. Cohort is not a predictor variable in Model 2.]. It is directly comparable to Figure 1 Panel A in Saint Onge et al. It shows that each period ushers in higher life expectancies for each cohort. Life expectancies at age 20 were `r life_tbl_period %>% filter(age_bin == "[0,25)", period_bin == "[1910,1920)") %>% pull(ex) %>% comma(.1)` years (45.7 in Saint Onge et al) among those alive between 1910 and 1919, `r life_tbl_period %>% filter(age_bin == "[0,25)", period_bin == "[1930,1940)") %>% pull(ex) %>% comma(.1)` years (53.6 years in Saint Onge et al) among those alive between 1930 and 1939, `r life_tbl_period %>% filter(age_bin == "[0,25)", period_bin == "[1950,1960)") %>% pull(ex) %>% comma(.1)` years (56.3 years in Saint Onge et al) among those alive between 1950 and 1959, and `r life_tbl_period %>% filter(age_bin == "[0,25)", period_bin == "[1970,Inf)") %>% pull(ex) %>% comma(.1)` years (59.6 years in Saint Onge et al) among those alive between 1970 and 2004. Panel B show life expectancies by debut era. In Saint Onge et al, players from the Modern Era can expect to live 65.5 years, compared to 52.4 years from the Early Era and 58.3 from the Golden Era. My Panel B does not show that, I think because of the collinearity between era and time period in the model.
+Figure 1 illustrates life expectancies for calendar periods (Panel A) calculated from Model 2 in Table 2 and cohorts (Panel B) from Model 3^[The Authors say both panels are from Model 2, but that cannot be right. Cohort is not a predictor variable in Model 2.]. Figure 1 is directly comparable to the Authors' [Figure 1](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2743321/figure/F1/). It shows that each period ushers in higher life expectancies for each cohort. Life expectancies at age 20 were `r life_tbl_period %>% filter(age_bin == "[0,25)", period_bin == "[1910,1920)") %>% pull(ex) %>% comma(.1)` years (Authors report 45.7 years) among those alive between 1910 and 1919, `r life_tbl_period %>% filter(age_bin == "[0,25)", period_bin == "[1930,1940)") %>% pull(ex) %>% comma(.1)` years (Authors report 53.6 years) among those alive between 1930 and 1939, `r life_tbl_period %>% filter(age_bin == "[0,25)", period_bin == "[1950,1960)") %>% pull(ex) %>% comma(.1)` years (Authors report 56.3 years) among those alive between 1950 and 1959, and `r life_tbl_period %>% filter(age_bin == "[0,25)", period_bin == "[1970,Inf)") %>% pull(ex) %>% comma(.1)` years (Authors report 59.6 years) among those alive between 1970 and 2004. Panel B show life expectancies by debut era. The Authors report 20 year-old players from the Modern Era can expect to live 65.5 years, compared to 52.4 years from the Early Era and 58.3 from the Golden Era. My Panel B does not show that, I think because of the collinearity between era and time period in the model.
 
 ```{r}
 # Panel B is constructed from the life table derived from model 3. Repeat the 
 # process.
-tdy_3 <- mdl_3 %>% broom::tidy()
+tdy_3 <- mdl_3_lr_2004 %>% broom::tidy()
 
 life_tbl_cohort <- tibble(
   age_bin = rep(levels(person_year$age_bin), 3),
   age_bin_term = paste0("age_bin", age_bin),
   cohort = map(levels(person_year$cohort), ~rep(.x, 14)) %>% unlist(),
   cohort_term = paste0("cohort", cohort),
-  intercept = coef(mdl_3)["(Intercept)"],
-  us_male_e = rep(c(53.25, 48.67, 44.10, 39.57, 35.09, 30.66, 26.37, 22.30, 18.53, 
-                 15.12, 12.05, 9.39, 7.12, 5.31), 3)
+  intercept = coef(mdl_3_lr_2004)["(Intercept)"],
+  us_male_e = rep(us_male_e, 3),
+  authors_e = rep(authors_e, 3)
 ) %>%
   left_join(tdy_3 %>% select(age_bin_term = term, age_bin_est = estimate), 
             by = "age_bin_term") %>%
@@ -604,7 +667,14 @@ life_tbl_cohort <- tibble(
   ) %>%
   ungroup() %>%
   arrange(cohort, age_bin) %>%
-  select(cohort, age_bin, intercept, age_bin_est, cohort_est, mx:ex, us_male_e)
+  select(cohort, age_bin, intercept, age_bin_est, cohort_est, mx:ex, us_male_e,
+         authors_e)
+
+# life_tbl_cohort %>%
+#   filter(cohort == "Modern (1969+)") %>%
+#   select(-cohort) %>%
+#   rename(period_bin_est = cohort_est) %>% # hack so I can reuse function.
+#   life_flex()
 ```
 
 ```{r}
@@ -631,33 +701,25 @@ fig1a / fig1b +
 
 # 2022 Update
 
-At the time of this analysis, the Lahman R package data source has player debuts through `r format(max(person_year$debut), "%b %Y")`.
+At the time of this analysis, the **Lahman** R package contains player debuts through `r format(max(person_year$debut), "%b %Y")`. How do the results change with 17 years of additional data? Table 4 presents the model fits with the updated data.
 
 ```{r}
-mdl_1_2022 <- glm(status ~ age_bin, 
-             data = person_year, family = binomial(link = "cloglog"))
-mdl_2_2022 <- glm(status ~ age_bin + period_bin, 
-             data = person_year, family = binomial(link = "cloglog"))
-mdl_3_2022 <- glm(status ~ age_bin + period_bin + cohort, 
-             data = person_year, family = binomial(link = "cloglog"))
-mdl_4_2022 <- glm(status ~ age_bin + period_bin + bmi_fct, 
-             data = person_year, family = binomial(link = "cloglog"))
-mdl_5_2022 <- glm(status ~ age_bin + period_bin + height_fct, 
-             data = person_year, family = binomial(link = "cloglog"))
-mdl_6_2022 <- glm(status ~ age_bin + period_bin + throws, 
-             data = person_year, family = binomial(link = "cloglog"))
-# not mdl_7 or mdl_8 because I do not have player ratings.
-mdl_9_2022 <- glm(status ~ age_bin + period_bin + career_length_fct, 
-             data = person_year, family = binomial(link = "cloglog"))
+mdl_1_lr_2022 <- glm(fmla_1_lr, data = person_year, family = binomial(link = "cloglog"))
+mdl_2_lr_2022 <- glm(fmla_2_lr, data = person_year, family = binomial(link = "cloglog"))
+mdl_3_lr_2022 <- glm(fmla_3_lr, data = person_year, family = binomial(link = "cloglog"))
+mdl_4_lr_2022 <- glm(fmla_4_lr, data = person_year, family = binomial(link = "cloglog"))
+mdl_5_lr_2022 <- glm(fmla_5_lr, data = person_year, family = binomial(link = "cloglog"))
+mdl_6_lr_2022 <- glm(fmla_6_lr, data = person_year, family = binomial(link = "cloglog"))
+mdl_9_lr_2022 <- glm(fmla_9_lr, data = person_year, family = binomial(link = "cloglog"))
 
 bind_rows(
-  `Model 1` = tidy(mdl_1_2022, exponentiate = FALSE),
-  `Model 2` = tidy(mdl_2_2022, exponentiate = FALSE),
-  `Model 3` = tidy(mdl_3_2022, exponentiate = FALSE),
-  `Model 4` = tidy(mdl_4_2022, exponentiate = FALSE),
-  `Model 5` = tidy(mdl_5_2022, exponentiate = FALSE),
-  `Model 6` = tidy(mdl_6_2022, exponentiate = FALSE),
-  `Model 9` = tidy(mdl_9_2022, exponentiate = FALSE),
+  `Model 1` = tidy(mdl_1_lr_2022, exponentiate = FALSE),
+  `Model 2` = tidy(mdl_2_lr_2022, exponentiate = FALSE),
+  `Model 3` = tidy(mdl_3_lr_2022, exponentiate = FALSE),
+  `Model 4` = tidy(mdl_4_lr_2022, exponentiate = FALSE),
+  `Model 5` = tidy(mdl_5_lr_2022, exponentiate = FALSE),
+  `Model 6` = tidy(mdl_6_lr_2022, exponentiate = FALSE),
+  `Model 9` = tidy(mdl_9_lr_2022, exponentiate = FALSE),
   .id = "model_num"
 ) %>%
   mutate(lbl = map2_chr(scales::comma(estimate, .01), p.value, astercize)) %>%
@@ -666,23 +728,234 @@ bind_rows(
   flextable::align(j = 2:8, align = "right") %>%
   flextable::theme_zebra() %>%
   flextable::autofit() %>%
-  flextable::set_caption("Table 4. MLB hazard odds ratio coeficients on mortality, 1902 - 2021.")
+  flextable::set_caption("Table 4. MLB hazard log odds ratio coefficients on mortality, 1902 - 2021.")
 ```
+
+Comparing Table 4 to Table 2, the mortality risk relative to the age 0-24 reference group has fallen for all ages. For example, players aged 40–44 were exp(`r tidy(mdl_1_lr_2004, exponentiate = FALSE) %>% filter(term == "age_bin[40,45)") %>% pull(estimate) %>% comma(.01)`) = `r tidy(mdl_1_lr_2004, exponentiate = TRUE) %>% filter(term == "age_bin[40,45)") %>% pull(estimate) %>% comma(.01)` times as likely to die in the 2004 data set are now estimated to be exp(`r tidy(mdl_1_lr_2022, exponentiate = FALSE) %>% filter(term == "age_bin[40,45)") %>% pull(estimate) %>% comma(.01)`) = `r tidy(mdl_1_lr_2022, exponentiate = TRUE) %>% filter(term == "age_bin[40,45)") %>% pull(estimate) %>% comma(.01)` times as likely to die. The mortality risk during each period has fallen in magnitude (Model 2). The Modern cohort has much increased mortality risk (Model 3). Obesity (Model 4) and height (Model 5) hav a slightly higher risk, left-handedness is unchanged (Model 6), and career length is slightly less important (Model 9).
 
 # Cox Proportional Hazards
 
-The Authors chose logistic regression model because it is compatible with life table development.
-For comparison, I will fit equivalent Cox proportional hazards models.
+The Authors fit a logistic regression model because it enabled them to present their results in life tables. It is more common to see studies fit a Cox proportional hazards model.
+
+Recall that the Cox proportional hazards model expresses mortality hazard as an unspecified baseline hazard multiplied by the exponential of a linear combination of the explanatory variables, $h(t) = h_0(t) \cdot e^{X\beta}$. $h_0(t)$ is estimated from the data by maximum likelihood estimation. The proportionality of the model comes from the lack of time dependence in the explanatory variables. Whereas logistic regression predicts the log odds of the response variable, Cox regression predicts the *log relative hazard*, $\ln \left[ \frac{h(t)}{h_0(t)} \right] = X\beta$ (relative to the baseline). A change in $X$ from $x_a$ to $x_b$ is associated with a $(x_b - x_a)\beta = \ln \left[ \frac{h_b(t)}{h_0(t)} \right] - \ln \left[ \frac{h_a(t)}{h_0(t)} \right] = \ln \left[ \frac{h_b(t)}{h_a(t)} \right]$ change in the log relative hazard. When $x$ is a factor variable, $x_b - x_a$ is a unit change and the antilog of $\beta$ is the hazard ratio of level $b$ relative to level $a$, $e^\beta = \frac{h_b(t)}{h_a(t)}$.
+
+There is no need to develop person-year rows for Cox regression. Just create a variable for the death/censor time from birth (in years), and status (dead or censored). However, given the broad expanse of time covered in the data, the model should control for changes in medical technology. That was the role of the Authors' *Period* covariate.
 
 ```{r}
-cox_dat <- person %>%
+cox_dat_0 <- person %>%
   mutate(
-    time = time_length(interval(birthDate, 
-                                coalesce(deathDate, max(person$finalGame, na.rm = TRUE))), 
-                       unit = "year"),
-    status = if_else(is.na(deathDate), 1, 2)
+    age_at_debut = time_length(interval(birthDate, debut), unit = "year"),
+    # follow-up time is earlier of two dates: death or data set date.
+    fu_date = coalesce(deathDate, max(person$deathDate, na.rm = TRUE)),
+    fu_time = time_length(interval(debut, fu_date), unit = "year"),
+    fu_status = if_else(is.na(deathDate), 0, 1),
+    # Decade indicators are instrumental variables capturing general advances
+    # in life-extending medical technology. *_time = years from debut to start of
+    # decade. If debut is in middle of a decade, then *_time is 0 years.
+    pd1900_status = "[1900-1910)",
+    pd1900_time = pmax(time_length(interval(debut, ym(190001)), unit = "year"), 0),
+    pd1900_time = if_else(fu_date >= ym(190001) & debutYear < 1910, pd1900_time, NA_real_),
+    pd1910_status = "[1910-1920)",
+    pd1910_time = pmax(time_length(interval(debut, ym(191001)), unit = "year"), 0),
+    pd1910_time = if_else(fu_date >= ym(191001) & debutYear < 1920, pd1910_time, NA_real_),
+    pd1920_status = "[1920-1930)",
+    pd1920_time = pmax(time_length(interval(debut, ym(192001)), unit = "year"), 0),
+    pd1920_time = if_else(fu_date >= ym(192001) & debutYear < 1930, pd1920_time, NA_real_),
+    pd1930_status = "[1930-1940)",
+    pd1930_time = pmax(time_length(interval(debut, ym(193001)), unit = "year"), 0),
+    pd1930_time = if_else(fu_date >= ym(193001) & debutYear < 1940, pd1930_time, NA_real_),
+    pd1940_status = "[1940-1950)",
+    pd1940_time = pmax(time_length(interval(debut, ym(194001)), unit = "year"), 0),
+    pd1940_time = if_else(fu_date >= ym(194001) & debutYear < 1950, pd1940_time, NA_real_),
+    pd1950_status = "[1950-1960)",
+    pd1950_time = pmax(time_length(interval(debut, ym(195001)), unit = "year"), 0),
+    pd1950_time = if_else(fu_date >= ym(195001) & debutYear < 1960, pd1950_time, NA_real_),
+    pd1960_status = "[1960-1970)",
+    pd1960_time = pmax(time_length(interval(debut, ym(196001)), unit = "year"), 0),
+    pd1960_time = if_else(fu_date >= ym(196001) & debutYear < 1970, pd1960_time, NA_real_),
+    pd1970_status = "[1970-Inf)",
+    pd1970_time = pmax(time_length(interval(debut, ym(197001)), unit = "year"), 0),
+    pd1970_time = if_else(fu_date >= ym(197001) & debutYear < 9999, pd1970_time, NA_real_)
   )
-coxph(Surv(time, status) ~ cohort, data = cox_dat)
+
+# Don't need the newly created period vars in the final data set.
+cox_dat_1 <- tmerge(
+  cox_dat_0 %>% select(-starts_with("pd")), 
+  cox_dat_0, 
+  id = playerID, 
+  death = event(fu_time, fu_status)
+)
+# y <- survfit(Surv(fu_time, fu_status) ~ cohort, data = cox_dat_1)
+# survminer::ggsurvplot(y, surv.median.line = "hv")
+# cox_dat_1 %>% select(playerID, birthDate, debut, deathDate, age_at_debut, fu_date:death) 
+
+# Create the decade var
+cox_dat <- tmerge(
+  cox_dat_1, cox_dat_0, id = playerID, 
+  decade1900 = tdc(pd1900_time, pd1900_status),
+  decade1910 = tdc(pd1910_time, pd1910_status),
+  decade1920 = tdc(pd1920_time, pd1920_status),
+  decade1930 = tdc(pd1930_time, pd1930_status),
+  decade1940 = tdc(pd1940_time, pd1940_status),
+  decade1950 = tdc(pd1950_time, pd1950_status),
+  decade1960 = tdc(pd1960_time, pd1960_status),
+  decade1970 = tdc(pd1970_time, pd1970_status)
+) %>%
+  mutate(decade = factor(coalesce(decade1970, decade1960, decade1950, decade1940, 
+                                  decade1930, decade1920, decade1910, decade1900))) %>%
+  select(-starts_with("decade19")) %>%
+  filter(!is.na(decade))
+# y <- survfit(Surv(fu_time, fu_status) ~ cohort, data = cox_dat)
+# survminer::ggsurvplot(y, surv.median.line = "hv")
+# cox_dat %>% select(playerID, birthDate, deathDate, fu_date:death, decade) 
+```
+
+Model 1 is not relevant to Cox regression since they use player-year predictors, but the others can be fit with Cox. In addition to the univariate models, I fit a multivariate model with all of the predictor variables.
+
+```{r}
+mdl_2_cox <- coxph(Surv(fu_time, fu_status) ~ age_at_debut + decade, data = cox_dat)
+# mdl_3_cox <- coxph(Surv(fu_time, fu_status) ~ decade + cohort, data = cox_dat)
+# mdl_4_cox <- coxph(Surv(fu_time, fu_status) ~ decade + bmi_fct_2, data = cox_dat)
+# mdl_5_cox <- coxph(Surv(fu_time, fu_status) ~ decade + height_fct_2, data = cox_dat)
+# mdl_6_cox <- coxph(Surv(fu_time, fu_status) ~ decade + throws_2, data = cox_dat)
+# mdl_9_cox <- coxph(Surv(fu_time, fu_status) ~ decade + career_length_fct, data = cox_dat)
+# Additional model with all covariates.
+mdl_allin_cox <- coxph(Surv(fu_time, fu_status) ~ age_at_debut + decade + cohort + bmi_fct_2 + 
+                         height_fct_2 + throws_2 + career_length_fct, data = cox_dat)
+```
+
+The next table summarizes the model results. I stack the univariate models into one column, then merge it with the multivariate model for comparison.
+
+```{r}
+(gt_2_cox <- gtsummary::tbl_regression(mdl_2_cox, exponentiate = TRUE))
+# gt_3_cox <- gtsummary::tbl_regression(mdl_3_cox, exponentiate = TRUE)
+# gt_4_cox <- gtsummary::tbl_regression(mdl_4_cox, exponentiate = TRUE)
+# gt_5_cox <- gtsummary::tbl_regression(mdl_5_cox, exponentiate = TRUE)
+# gt_6_cox <- gtsummary::tbl_regression(mdl_6_cox, exponentiate = TRUE)
+# gt_9_cox <- gtsummary::tbl_regression(mdl_9_cox, exponentiate = TRUE)
+(gt_all_cox <- gtsummary::tbl_regression(mdl_allin_cox, exponentiate = FALSE))
+(gt_all_cox_exp <- gtsummary::tbl_regression(mdl_allin_cox, exponentiate = TRUE))
+
+# gt_univariate <- gtsummary::tbl_stack(
+#   list(gt_3_cox, gt_4_cox, gt_5_cox, gt_6_cox, gt_9_cox), 
+#   group_header = c("Model 3", "Model 4", "Model 5", "Model 6", "Model 9"))
+# 
+gtsummary::tbl_merge(
+ list(gt_all_cox, gt_all_cox_exp), 
+ tab_spanner = c("Log(HR)", "Exponentiated"))
+```
+
+<br>The "all in" model estimates similar cohort effects as the univariate model, meaning the effect of cohort did not change after controlling for the other covariates. Compared to players debuting in the Early era, a Modern era player enjoyed a much lower morbidity risk (HR `r gtsummary::inline_text(gt_all_cox, cohort, "Modern (1969+)")`). BMI was not significant in the univariate model, but was significant at the .05 level for both the Overweight level (HR `r gtsummary::inline_text(gt_all_cox, bmi_fct_2, "Overweight")`) and the Obese level (HR `r gtsummary::inline_text(gt_all_cox, bmi_fct_2, "Obese")`). The mortality risk of being overweight was minor, but is much higher for obese players. Height was not significant in the multivariate model, but was significant in the univariate model, perhaps because it is correlated with cohort. Career length was significant in both models. Players with careers over 10 years had a slightly lower morbidity risk (HR `r gtsummary::inline_text(gt_all_cox, career_length_fct, "10+ years")`).
+
+Cox regression should produce similar results to logistic regression when sample sizes are large. I tested that by fitting the equivalent models with logistic regression using a complementary log-log link function.
+
+```{r}
+mdl_3_lr <- glm(status ~ cohort, data = person_year,
+                family = binomial(link = "cloglog"))
+# mdl_4_lr <- glm(status ~ yr + bmi_fct_2, data = person_year, 
+#                 family = binomial(link = "cloglog"))
+# mdl_5_lr <- glm(status ~ yr + height_fct_2, data = person_year, 
+#                 family = binomial(link = "cloglog"))
+# mdl_6_lr <- glm(status ~ yr + throws_2, data = person_year, family = 
+#                   binomial(link = "cloglog"))
+# mdl_9_lr <- glm(status ~ yr + career_length_fct, data = person_year, 
+#                 family = binomial(link = "cloglog"))
+mdl_all_lr <- glm(status ~ cohort + bmi_fct_2 + height_fct_2 + 
+                      throws_2 + career_length_fct, 
+                data = person_year, family = binomial(link = "cloglog"))
+
+gtsummary::tbl_regression(mdl_3_lr, exponentiate = TRUE)
+# gt_4_lr <- gtsummary::tbl_regression(mdl_4_lr, exponentiate = TRUE)
+# gt_5_lr <- gtsummary::tbl_regression(mdl_5_lr, exponentiate = TRUE)
+# gt_6_lr <- gtsummary::tbl_regression(mdl_6_lr, exponentiate = TRUE)
+# gt_9_lr <- gtsummary::tbl_regression(mdl_9_lr, exponentiate = TRUE)
+gt_all_lr <- gtsummary::tbl_regression(mdl_all_lr, exponentiate = TRUE)
+
+# gt_univariate_lr <- gtsummary::tbl_stack(
+#   list(gt_3_lr, gt_4_lr, gt_5_lr, gt_6_lr, gt_9_lr), 
+#   group_header = c("Model 3", "Model 4", "Model 5", "Model 6", "Model 9"))
+
+# gtsummary::tbl_merge(
+#   list(gt_univariate, gt_all_cox, gt_univariate_lr, gt_all_lr), 
+#   tab_spanner = c("Univariate", "All In", "Logistic", "Logistic (all-in)"))
+
+gtsummary::tbl_merge(
+  list(gt_all_cox, gt_all_lr), 
+  tab_spanner = c("Cox", "Logistic"))
+```
+
+<br>The logistic regression facilitated the construction of life tables. The Cox proportional hazards model does not do that, but instead, the model can be used to predict survival at selected predictor levels. The plots below compare cohort survival expectations for right-handed players over 6 feet with a career length under ten years. The plots are faceted by player BMI.
+
+```{r}
+# x <- person %>%
+#   mutate(
+#     fu_date = coalesce(deathDate, max(person$deathDate, na.rm = TRUE)),
+#     fu_time = time_length(interval(birthDate, fu_date), unit = "year"),
+#     fu_status = if_else(is.na(deathDate), 0, 1),
+#     age_at_death = time_length(interval(birthDate, deathDate), "year")
+#   ) 
+# y <- survfit(Surv(fu_time, fu_status) ~ cohort, data = x)
+# survminer::ggsurvplot(y, surv.median.line = "hv")
+# 
+# x <- cox_dat %>%
+#   mutate(
+#     fu_date = coalesce(deathDate, max(person$deathDate, na.rm = TRUE)),
+#     fu_time = time_length(interval(birthDate, fu_date), unit = "year"),
+#     fu_status = if_else(is.na(deathDate), 0, 1),
+#     age_at_death = time_length(interval(birthDate, deathDate), "year")
+#   ) %>%
+#   filter(!(cohort == "Modern (1969+)" & fu_time > 80 & age_at_death > 80))
+# y <- survfit(Surv(fu_time, fu_status) ~ cohort, data = x)
+# survminer::ggsurvplot(y, surv.median.line = "hv")
+# 
+mdl_0_cox <- coxph(Surv(fu_time, fu_status) ~ age_at_debut + cohort, data = cox_dat)
+
+new_data <- expand.grid(
+  age_at_debut = 25,
+  cohort = levels(cox_dat$cohort)
+) %>% mutate(strata = as.factor(row_number()))
+pred_cox_0 <- survfit(mdl_0_cox, newdata = new_data, dat = cox_dat)
+pred_cox_1 <- survminer::surv_summary(pred_cox_0)
+pred_cox <- pred_cox_1 %>% inner_join(new_data, by = "strata")
+
+pred_cox %>%
+  ggplot(aes(x = time + 25, y = surv, color = cohort, fill = cohort)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.4) +
+  geom_hline(yintercept = 0.5, linetype = 2, color = "firebrick") +
+  theme_light() +
+  theme(legend.position = "top") +
+  labs(title = "Cox fitted model",
+       subtitle = "Right-handed players >6 feet with a career length < 10 yrs.") 
+```
+
+```{r}
+new_data <- expand.grid(
+  age_at_debut = 25,
+  decade = levels(cox_dat$decade)[5],
+  cohort = levels(cox_dat$cohort),
+  bmi_fct_2 = levels(cox_dat$bmi_fct_2),
+  height_fct_2 = ">=6 feet",
+  throws_2 = "Right Handed",
+  career_length_fct = levels(cox_dat$career_length_fct)[1]
+) %>% mutate(strata = as.factor(row_number()))
+
+pred_cox_0 <- survfit(mdl_allin_cox, newdata = new_data, dat = cox_dat)
+
+pred_cox_1 <- survminer::surv_summary(pred_cox_0)
+
+pred_cox <- pred_cox_1 %>% inner_join(new_data, by = "strata")
+
+pred_cox %>%
+  ggplot(aes(x = time + 25, y = surv, color = cohort, fill = cohort)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.4) +
+  geom_hline(yintercept = 0.5, linetype = 2, color = "firebrick") +
+  facet_wrap(facets = vars(bmi_fct_2)) +
+  theme_light() +
+  theme(legend.position = "top") +
+  labs(title = "Cox fitted model",
+       subtitle = "Right-handed players >6 feet with a career length < 10 yrs.") 
 ```
 
 # References
