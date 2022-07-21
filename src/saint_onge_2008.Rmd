@@ -838,9 +838,9 @@ The life expectancy estimates are higher for all ages and are closer to the Auth
 
 The Authors fit a logistic regression model because it enabled them to present their results in life tables. It is more common to see studies fit a Cox proportional hazards model.
 
-Recall that the Cox proportional hazards model expresses mortality hazard as an unspecified baseline hazard multiplied by the exponential of a linear combination of the explanatory variables, $h(t) = h_0(t) \cdot e^{X\beta}$. $h_0(t)$ is estimated from the data by maximum likelihood estimation. The proportionality of the model comes from the lack of time dependence in the explanatory variables. Whereas logistic regression predicts the log odds of the response variable, Cox regression predicts the *log relative hazard*, $\ln \left[ \frac{h(t)}{h_0(t)} \right] = X\beta$ (relative to the baseline). A change in $X$ from $x_a$ to $x_b$ is associated with a $(x_b - x_a)\beta = \ln \left[ \frac{h_b(t)}{h_0(t)} \right] - \ln \left[ \frac{h_a(t)}{h_0(t)} \right] = \ln \left[ \frac{h_b(t)}{h_a(t)} \right]$ change in the log relative hazard. When $x$ is a factor variable, $x_b - x_a$ is a unit change and the antilog of $\beta$ is the hazard ratio of level $b$ relative to level $a$, $e^\beta = \frac{h_b(t)}{h_a(t)}$.
+Recall that the Cox proportional hazards model expresses mortality hazard as an unspecified baseline hazard multiplied by the exponential of a linear combination of the explanatory variables, $h(t) = h_0(t) \cdot e^{X\beta}$. $h_0(t)$ is estimated from the data by maximum likelihood estimation. The proportionality of the model comes from the lack of time dependence in the explanatory variables. Whereas logistic regression predicts the log odds of the response variable, Cox regression predicts the *log relative hazard*, $\ln \left[ \frac{h(t)}{h_0(t)} \right] = X\beta$ (relative to the baseline). A change in $X$ from $x_a$ to $x_b$ is associated with a $(x_b - x_a)\beta = \ln \left[ \frac{h_b(t)}{h_0(t)} \right] - \ln \left[ \frac{h_a(t)}{h_0(t)} \right] = \ln \left[ \frac{h_b(t)}{h_a(t)} \right]$ change in the log relative hazard. When $x$ is a factor variable, $x_b - x_a$ is a factor level change and the antilog of $\beta$ is the hazard ratio of level $b$ relative to level $a$, $e^\beta = \frac{h_b(t)}{h_a(t)}$.
 
-There is no need to develop person-year rows for Cox regression. Just create a variable for the death/censor time from birth (in years), and status (dead or censored). However, given the broad expanse of time covered in the data, the model should control for changes in medical technology. That was the role of the Authors' *Period* covariate.
+There is no need to develop person-year rows for Cox regression. Instead, define a variable for the follow-up time (at death last observation time) from birth (in years), and status (dead or censored). However, given the broad expanse of time covered in the data, the model should control for changes in medical technology. That was the role of the Authors' *Period* covariate. And because we are estimating life expectancy by age group, the model needs a time dependent covariate for age.
 
 ```{r}
 cox_dat_0 <- person %>%
@@ -876,21 +876,60 @@ cox_dat_0 <- person %>%
     pd1960_time = if_else(fu_date >= ym(196001) & debutYear < 1970, pd1960_time, NA_real_),
     pd1970_status = "[1970-Inf)",
     pd1970_time = pmax(time_length(interval(debut, ym(197001)), unit = "year"), 0),
-    pd1970_time = if_else(fu_date >= ym(197001) & debutYear < 9999, pd1970_time, NA_real_)
+    pd1970_time = if_else(fu_date >= ym(197001) & debutYear < 9999, pd1970_time, NA_real_),
+    age00_status = "[0,25)",
+    age00_time = time_length(interval(debut, birthDate + years(0)), unit = "year"),
+    age00_time = if_else(fu_date >= birthDate + years(0) & age00_time >= -25, pmax(age00_time, 0), NA_real_),
+    age25_status = "[25,30)",
+    age25_time = time_length(interval(debut, birthDate + years(25)), unit = "year"),
+    age25_time = if_else(fu_date >= birthDate + years(25) & age25_time >= -5, pmax(age25_time, 0), NA_real_),
+    age30_status = "[30,35)",
+    age30_time = time_length(interval(debut, birthDate + years(30)), unit = "year"),
+    age30_time = if_else(fu_date >= birthDate + years(30) & age30_time >= -5, pmax(age30_time, 0), NA_real_),
+    age35_status = "[35,40)",
+    age35_time = time_length(interval(debut, birthDate + years(35)), unit = "year"),
+    age35_time = if_else(fu_date >= birthDate + years(35) & age35_time >= -5, pmax(age35_time, 0), NA_real_),
+    age40_status = "[40,45)",
+    age40_time = time_length(interval(debut, birthDate + years(40)), unit = "year"),
+    age40_time = if_else(fu_date >= birthDate + years(40) & age40_time >= -5, pmax(age40_time, 0), NA_real_),
+    age45_status = "[45,50)",
+    age45_time = time_length(interval(debut, birthDate + years(45)), unit = "year"),
+    age45_time = if_else(fu_date >= birthDate + years(45) & age45_time >= -5, pmax(age45_time, 0), NA_real_),
+    age50_status = "[50,55)",
+    age50_time = time_length(interval(debut, birthDate + years(50)), unit = "year"),
+    age50_time = if_else(fu_date >= birthDate + years(50) & age50_time >= -5, pmax(age50_time, 0), NA_real_),
+    age55_status = "[55,60)",
+    age55_time = time_length(interval(debut, birthDate + years(55)), unit = "year"),
+    age55_time = if_else(fu_date >= birthDate + years(55) & age55_time >= -5, pmax(age55_time, 0), NA_real_),
+    age60_status = "[60,65)",
+    age60_time = time_length(interval(debut, birthDate + years(60)), unit = "year"),
+    age60_time = if_else(fu_date >= birthDate + years(60) & age60_time >= -5, pmax(age60_time, 0), NA_real_),
+    age65_status = "[65,70)",
+    age65_time = time_length(interval(debut, birthDate + years(65)), unit = "year"),
+    age65_time = if_else(fu_date >= birthDate + years(65) & age65_time >= -5, pmax(age65_time, 0), NA_real_),
+    age70_status = "[70,75)",
+    age70_time = time_length(interval(debut, birthDate + years(70)), unit = "year"),
+    age70_time = if_else(fu_date >= birthDate + years(70) & age70_time >= -5, pmax(age70_time, 0), NA_real_),
+    age75_status = "[75,80)",
+    age75_time = time_length(interval(debut, birthDate + years(75)), unit = "year"),
+    age75_time = if_else(fu_date >= birthDate + years(75) & age75_time >= -5, pmax(age75_time, 0), NA_real_),
+    age80_status = "[80,85)",
+    age80_time = time_length(interval(debut, birthDate + years(80)), unit = "year"),
+    age80_time = if_else(fu_date >= birthDate + years(80) & age80_time >= -5, pmax(age80_time, 0), NA_real_),
+    age85_status = "[85,Inf)",
+    age85_time = time_length(interval(debut, birthDate + years(85)), unit = "year"),
+    age85_time = if_else(fu_date >= birthDate + years(85) & age85_time >= -5, pmax(age85_time, 0), NA_real_)
   )
 
 # Don't need the newly created period vars in the final data set.
 cox_dat_1 <- tmerge(
-  cox_dat_0 %>% select(-starts_with("pd")), 
+  cox_dat_0 %>% select(-starts_with("pd"), -starts_with("age")), 
   cox_dat_0, 
   id = playerID, 
   death = event(fu_time, fu_status)
 )
-# y <- survfit(Surv(fu_time, fu_status) ~ cohort, data = cox_dat_1)
-# survminer::ggsurvplot(y, surv.median.line = "hv")
-# cox_dat_1 %>% select(playerID, birthDate, debut, deathDate, age_at_debut, fu_date:death) 
 
-# Create the decade var
+# Create the decade and age vars
 cox_dat <- tmerge(
   cox_dat_1, cox_dat_0, id = playerID, 
   decade1900 = tdc(pd1900_time, pd1900_status),
@@ -900,51 +939,106 @@ cox_dat <- tmerge(
   decade1940 = tdc(pd1940_time, pd1940_status),
   decade1950 = tdc(pd1950_time, pd1950_status),
   decade1960 = tdc(pd1960_time, pd1960_status),
-  decade1970 = tdc(pd1970_time, pd1970_status)
+  decade1970 = tdc(pd1970_time, pd1970_status),
+  isage00 = tdc(age00_time, age00_status),
+  isage25 = tdc(age25_time, age25_status),
+  isage30 = tdc(age30_time, age30_status),
+  isage35 = tdc(age35_time, age35_status),
+  isage40 = tdc(age40_time, age40_status),
+  isage45 = tdc(age45_time, age45_status),
+  isage50 = tdc(age50_time, age50_status),
+  isage55 = tdc(age55_time, age55_status),
+  isage60 = tdc(age60_time, age60_status),
+  isage65 = tdc(age65_time, age65_status),
+  isage70 = tdc(age70_time, age70_status),
+  isage75 = tdc(age75_time, age75_status),
+  isage80 = tdc(age80_time, age80_status),
+  isage85 = tdc(age85_time, age85_status)
 ) %>%
   mutate(decade = factor(coalesce(decade1970, decade1960, decade1950, decade1940, 
-                                  decade1930, decade1920, decade1910, decade1900))) %>%
-  select(-starts_with("decade19")) %>%
-  filter(!is.na(decade))
-# y <- survfit(Surv(fu_time, fu_status) ~ cohort, data = cox_dat)
-# survminer::ggsurvplot(y, surv.median.line = "hv")
-# cox_dat %>% select(playerID, birthDate, deathDate, fu_date:death, decade) 
+                                  decade1930, decade1920, decade1910, decade1900)),
+         age = factor(coalesce(isage85, isage80, isage75, isage70, isage65, isage60, 
+                                   isage55, isage50, isage45, isage40, isage35, isage30, 
+                                   isage25, isage00))) %>%
+  select(-starts_with("decade19"), -starts_with("isage")) %>%
+  filter(!is.na(decade), !is.na(age))
 ```
 
-Model 1 is not relevant to Cox regression since they use player-year predictors, but the others can be fit with Cox. In addition to the univariate models, I fit a multivariate model with all of the predictor variables.
+```{r include=FALSE, eval=FALSE}
+cox_dat %>% 
+  mutate(debut_age = time_length(interval(birthDate, debut), "years")) %>%
+  filter(debut_age > 30) %>%
+  # filter(playerID == "acostme01") %>%
+  select(playerID, birthDate, debut, tstart, tstop, death, decade, age, fu_time, fu_status) 
+cox_dat %>% janitor::tabyl(age, death) %>% janitor::adorn_percentages() %>% janitor::adorn_ns()
+cox_dat %>% 
+  group_by(age) %>%
+  summarize(n = n(), surv = mean(death), age_len = mean(tstop - tstart))
 
-```{r}
-mdl_2_cox <- coxph(Surv(fu_time, fu_status) ~ age_at_debut + decade, data = cox_dat)
-# mdl_3_cox <- coxph(Surv(fu_time, fu_status) ~ decade + cohort, data = cox_dat)
-# mdl_4_cox <- coxph(Surv(fu_time, fu_status) ~ decade + bmi_fct_2, data = cox_dat)
-# mdl_5_cox <- coxph(Surv(fu_time, fu_status) ~ decade + height_fct_2, data = cox_dat)
-# mdl_6_cox <- coxph(Surv(fu_time, fu_status) ~ decade + throws_2, data = cox_dat)
-# mdl_9_cox <- coxph(Surv(fu_time, fu_status) ~ decade + career_length_fct, data = cox_dat)
-# Additional model with all covariates.
-mdl_allin_cox <- coxph(Surv(fu_time, fu_status) ~ age_at_debut + decade + cohort + bmi_fct_2 + 
-                         height_fct_2 + throws_2 + career_length_fct, data = cox_dat)
+new_dat <- data.frame(age = c("[0,25)", "[30,35)", "[50,55)")) %>% mutate(strata = as.factor(row_number()))
+preds_0 <- survfit(mdl_1_cox_2022, newdata = new_dat, data = cox_dat)
+preds_1 <- surv_summary(preds_0)
+preds_1 %>% inner_join(new_dat, by = "strata") %>%
+  ggplot(aes(x = time, y = surv, color = age, fill = age)) + geom_line() +
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.4)
 ```
 
 The next table summarizes the model results. I stack the univariate models into one column, then merge it with the multivariate model for comparison.
 
 ```{r}
-(gt_2_cox <- gtsummary::tbl_regression(mdl_2_cox, exponentiate = TRUE))
-# gt_3_cox <- gtsummary::tbl_regression(mdl_3_cox, exponentiate = TRUE)
-# gt_4_cox <- gtsummary::tbl_regression(mdl_4_cox, exponentiate = TRUE)
-# gt_5_cox <- gtsummary::tbl_regression(mdl_5_cox, exponentiate = TRUE)
-# gt_6_cox <- gtsummary::tbl_regression(mdl_6_cox, exponentiate = TRUE)
-# gt_9_cox <- gtsummary::tbl_regression(mdl_9_cox, exponentiate = TRUE)
-(gt_all_cox <- gtsummary::tbl_regression(mdl_allin_cox, exponentiate = FALSE))
-(gt_all_cox_exp <- gtsummary::tbl_regression(mdl_allin_cox, exponentiate = TRUE))
+mdl_1_cox_2022 <- coxph(Surv(tstart, tstop, death) ~ age, data = cox_dat)
+mdl_2_cox_2022 <- coxph(Surv(tstart, tstop, death) ~ age + decade, data = cox_dat)
+mdl_3_cox_2022 <- coxph(Surv(tstart, tstop, death) ~ age + decade + cohort, data = cox_dat)
+mdl_4_cox_2022 <- coxph(Surv(tstart, tstop, death) ~ age + decade + bmi_fct_2, data = cox_dat)
+mdl_5_cox_2022 <- coxph(Surv(tstart, tstop, death) ~ age + decade + height_fct_2, data = cox_dat)
+mdl_6_cox_2022 <- coxph(Surv(tstart, tstop, death) ~ age + decade + throws_2, data = cox_dat)
+mdl_9_cox_2022 <- coxph(Surv(tstart, tstop, death) ~ age + decade + career_length_fct, data = cox_dat)
 
-# gt_univariate <- gtsummary::tbl_stack(
-#   list(gt_3_cox, gt_4_cox, gt_5_cox, gt_6_cox, gt_9_cox), 
-#   group_header = c("Model 3", "Model 4", "Model 5", "Model 6", "Model 9"))
-# 
+gt_1_cox_2022 <- tbl_regression(mdl_1_cox_2022, exponentiate = TRUE) %>% 
+  add_significance_stars(hide_se = TRUE)
+gt_2_cox_2022 <- tbl_regression(mdl_2_cox_2022, exponentiate = FALSE) %>% 
+  add_significance_stars(hide_se = TRUE)
+gt_3_cox_2022 <- tbl_regression(mdl_3_cox_2022, exponentiate = FALSE) %>% 
+  add_significance_stars(hide_se = TRUE)
+gt_4_cox_2022 <- tbl_regression(mdl_4_cox_2022, exponentiate = FALSE) %>% 
+  add_significance_stars(hide_se = TRUE)
+gt_5_cox_2022 <- tbl_regression(mdl_5_cox_2022, exponentiate = FALSE) %>% 
+  add_significance_stars(hide_se = TRUE)
+gt_6_cox_2022 <- tbl_regression(mdl_6_cox_2022, exponentiate = FALSE) %>% 
+  add_significance_stars(hide_se = TRUE)
+gt_9_cox_2022 <- tbl_regression(mdl_9_cox_2022, exponentiate = FALSE) %>% 
+  add_significance_stars(hide_se = TRUE)
+
 gtsummary::tbl_merge(
- list(gt_all_cox, gt_all_cox_exp), 
- tab_spanner = c("Log(HR)", "Exponentiated"))
+ list(gt_1_cox_2022, gt_2_cox_2022, gt_3_cox_2022, gt_4_cox_2022, gt_5_cox_2022, 
+      gt_6_cox_2022, gt_9_cox_2022), 
+ tab_spanner = c("Model 1", "Model 2", "Model 3", "Model 4", "Model 5", 
+                 "Model 6", "Model 9")
+) 
 ```
+
+Model 1 shows that the odds of death increase with age. Players aged 40–44 are `r gtsummary::inline_text(gt_1_cox_2022, age, "[40,45)")` times as likely to die over the follow-up period as players aged 20–24 (Authors report exp(1.32) = 3.74), those aged 50–54 are `r gtsummary::inline_text(gt_1_cox_2022, age, "[50,55)")` times as likely to die (Authors report exp(2.39) = 10.9), and players aged 70–74 are `r gtsummary::inline_text(gt_1_cox_2022, age, "[70,75)")` times as likely to die (Authors report exp(4.00) = 54.6). The **Lahman**-based data produced higher mortality risk estimates at all age groups for Model 1.
+
+Model 2 shows that, adjusting for age, more recent calendar periods are associated with lower risks of death. The greatest declines in mortality took place between the 1920–1929 and 1930–1939 periods, exp(`r tidy(mdl_2_lr_2004, exponentiate = FALSE) %>% filter(term == "period_bin[1920,1930)") %>% pull(estimate) %>% comma(.01)`) = `r tidy(mdl_2_lr_2004, exponentiate = TRUE) %>% filter(term == "period_bin[1920,1930)") %>% pull(estimate) %>% comma(.01)` to exp(`r tidy(mdl_2_lr_2004, exponentiate = FALSE) %>% filter(term == "period_bin[1930,1940)") %>% pull(estimate) %>% comma(.01)`) = `r tidy(mdl_2_lr_2004, exponentiate = TRUE) %>% filter(term == "period_bin[1930,1940)") %>% pull(estimate) %>% comma(.01)` (Authors report exp(-.54) = 0.58 to exp(-1.08) = 0.34), and between the 1960–1969 and 1970–2004 periods, exp(`r tidy(mdl_2_lr_2004, exponentiate = FALSE) %>% filter(term == "period_bin[1960,1970)") %>% pull(estimate) %>% comma(.01)`) = `r tidy(mdl_2_lr_2004, exponentiate = TRUE) %>% filter(term == "period_bin[1960,1970)") %>% pull(estimate) %>% comma(.01)` to exp(`r tidy(mdl_2_lr_2004, exponentiate = FALSE) %>% filter(term == "period_bin[1970,Inf)") %>% pull(estimate) %>% comma(.01)`) = `r tidy(mdl_2_lr_2004, exponentiate = TRUE) %>% filter(term == "period_bin[1970,Inf)") %>% pull(estimate) %>% comma(.01)`) (Authors report exp(-1.47) = 0.23 to exp(-1.97) = 0.14). The **Lahman**-based data produced a slightly larger negative association between mortality risk and calendar period for the first two periods, and a smaller association for the remaining periods. 
+
+The Authors' Model 3 shows that the coefficients for period and age are reduced but remain strong predictors of mortality after adjusting for the cohort of debut. The **Lahman**-based data produce a similar result. Compared to those debuting during the Early period (1902-1945), players debuting in the Golden period (1946-1968) were exp(`r tidy(mdl_3_lr_2004, exponentiate = FALSE) %>% filter(term == "cohortGolden") %>% pull(estimate) %>% comma(.01)`) = `r tidy(mdl_3_lr_2004, exponentiate = TRUE) %>% filter(term == "cohortGolden") %>% pull(estimate) %>% comma(.01)` as likely to die (Authors report exp(-0.49) = 0.61), and players debuting in the Modern period (1969+) were exp(`r tidy(mdl_3_lr_2004, exponentiate = FALSE) %>% filter(term == "cohortModern") %>% pull(estimate) %>% comma(.01)`) = `r tidy(mdl_3_lr_2004, exponentiate = TRUE) %>% filter(term == "cohortModern") %>% pull(estimate) %>% comma(.01)` as likely to die (Authors report exp(-1.02) = 0.36). The **Lahman**-based data produced a smaller benefit from more recent cohorts. The reduction in the period coefficients is due to the correlation between debut era and the period bins. In the plot below, all Modern era player-year records are (by definition) in the 1970+ period.
+
+```{r}
+person_year_2004 %>%
+  count(period_bin, cohort) %>%
+  ggplot(aes(x = period_bin, y = n, fill = cohort)) +
+  geom_col() +
+  theme_light() + 
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(y = "player-years", fill = NULL, 
+       title = "Period and Cohort (Debut Era) Association")
+```
+
+Models 4, 5, and 6 estimate insignificant (at .05 level) associations between risk and obesity (exp(`r tidy(mdl_4_lr_2004, exponentiate = FALSE) %>% filter(term == "bmi_fct_2Obese") %>% pull(estimate) %>% comma(.01)`) = `r tidy(mdl_4_lr_2004, exponentiate = TRUE) %>% filter(term == "bmi_fct_2Obese") %>% pull(estimate) %>% comma(.01)`, Authors report exp(.57) = 1.77), height over six feet (exp(`r tidy(mdl_5_lr_2004, exponentiate = FALSE) %>% filter(term == "height_fct_2>=6 feet") %>% pull(estimate) %>% comma(.01)`) = `r tidy(mdl_5_lr_2004, exponentiate = TRUE) %>% filter(term == "height_fct_2>=6 feet") %>% pull(estimate) %>% comma(.01)`, Authors report exp(.03) = 1.03), and left-handedness (exp(`r tidy(mdl_6_lr_2004, exponentiate = FALSE) %>% filter(term == "throws_2Left Handed") %>% pull(estimate) %>% comma(.01)`) = `r tidy(mdl_6_lr_2004, exponentiate = TRUE) %>% filter(term == "throws_2Left Handed") %>% pull(estimate) %>% comma(.01)`, Authors report exp(-.02) = 0.98).
+
+Finally, those who play for 10 or more years have (1 - exp(`r tidy(mdl_9_lr_2004, exponentiate = FALSE) %>% filter(term == "career_length_fct10+ years") %>% pull(estimate) %>% comma(.01)`)) * 100 = `r tidy(mdl_9_lr_2004, exponentiate = TRUE) %>% filter(term == "career_length_fct10+ years") %>% mutate(lwr = (1 - estimate) * 100) %>% pull(lwr) %>% comma(1)` percent lower odds of death over the follow-up period than those who have shorter careers (Model 9). The Authors report 14 percent lower odds.
+
+
 
 <br>The "all in" model estimates similar cohort effects as the univariate model, meaning the effect of cohort did not change after controlling for the other covariates. Compared to players debuting in the Early era, a Modern era player enjoyed a much lower morbidity risk (HR `r gtsummary::inline_text(gt_all_cox, cohort, "Modern")`). BMI was not significant in the univariate model, but was significant at the .05 level for both the Overweight level (HR `r gtsummary::inline_text(gt_all_cox, bmi_fct_2, "Overweight")`) and the Obese level (HR `r gtsummary::inline_text(gt_all_cox, bmi_fct_2, "Obese")`). The mortality risk of being overweight was minor, but is much higher for obese players. Height was not significant in the multivariate model, but was significant in the univariate model, perhaps because it is correlated with cohort. Career length was significant in both models. Players with careers over 10 years had a slightly lower morbidity risk (HR `r gtsummary::inline_text(gt_all_cox, career_length_fct, "10+ years")`).
 
