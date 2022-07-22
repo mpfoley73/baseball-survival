@@ -964,26 +964,7 @@ cox_dat <- tmerge(
   filter(!is.na(decade), !is.na(age))
 ```
 
-```{r include=FALSE, eval=FALSE}
-cox_dat %>% 
-  mutate(debut_age = time_length(interval(birthDate, debut), "years")) %>%
-  filter(debut_age > 30) %>%
-  # filter(playerID == "acostme01") %>%
-  select(playerID, birthDate, debut, tstart, tstop, death, decade, age, fu_time, fu_status) 
-cox_dat %>% janitor::tabyl(age, death) %>% janitor::adorn_percentages() %>% janitor::adorn_ns()
-cox_dat %>% 
-  group_by(age) %>%
-  summarize(n = n(), surv = mean(death), age_len = mean(tstop - tstart))
-
-new_dat <- data.frame(age = c("[0,25)", "[30,35)", "[50,55)")) %>% mutate(strata = as.factor(row_number()))
-preds_0 <- survfit(mdl_1_cox_2022, newdata = new_dat, data = cox_dat)
-preds_1 <- surv_summary(preds_0)
-preds_1 %>% inner_join(new_dat, by = "strata") %>%
-  ggplot(aes(x = time, y = surv, color = age, fill = age)) + geom_line() +
-  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.4)
-```
-
-The next table summarizes the model results. I stack the univariate models into one column, then merge it with the multivariate model for comparison.
+The following table summarizes the models. 
 
 ```{r}
 mdl_1_cox_2022 <- coxph(Surv(tstart, tstop, death) ~ age, data = cox_dat)
@@ -994,94 +975,90 @@ mdl_5_cox_2022 <- coxph(Surv(tstart, tstop, death) ~ age + decade + height_fct_2
 mdl_6_cox_2022 <- coxph(Surv(tstart, tstop, death) ~ age + decade + throws_2, data = cox_dat)
 mdl_9_cox_2022 <- coxph(Surv(tstart, tstop, death) ~ age + decade + career_length_fct, data = cox_dat)
 
+# For text description.
 gt_1_cox_2022 <- tbl_regression(mdl_1_cox_2022, exponentiate = TRUE) %>% 
   add_significance_stars(hide_se = TRUE)
-gt_2_cox_2022 <- tbl_regression(mdl_2_cox_2022, exponentiate = FALSE) %>% 
+gt_2_cox_2022 <- tbl_regression(mdl_2_cox_2022, exponentiate = TRUE) %>% 
   add_significance_stars(hide_se = TRUE)
-gt_3_cox_2022 <- tbl_regression(mdl_3_cox_2022, exponentiate = FALSE) %>% 
+gt_3_cox_2022 <- tbl_regression(mdl_3_cox_2022, exponentiate = TRUE) %>% 
   add_significance_stars(hide_se = TRUE)
-gt_4_cox_2022 <- tbl_regression(mdl_4_cox_2022, exponentiate = FALSE) %>% 
+gt_4_cox_2022 <- tbl_regression(mdl_4_cox_2022, exponentiate = TRUE) %>% 
   add_significance_stars(hide_se = TRUE)
-gt_5_cox_2022 <- tbl_regression(mdl_5_cox_2022, exponentiate = FALSE) %>% 
+gt_5_cox_2022 <- tbl_regression(mdl_5_cox_2022, exponentiate = TRUE) %>% 
   add_significance_stars(hide_se = TRUE)
-gt_6_cox_2022 <- tbl_regression(mdl_6_cox_2022, exponentiate = FALSE) %>% 
+gt_6_cox_2022 <- tbl_regression(mdl_6_cox_2022, exponentiate = TRUE) %>% 
   add_significance_stars(hide_se = TRUE)
-gt_9_cox_2022 <- tbl_regression(mdl_9_cox_2022, exponentiate = FALSE) %>% 
+gt_9_cox_2022 <- tbl_regression(mdl_9_cox_2022, exponentiate = TRUE) %>% 
+  add_significance_stars(hide_se = TRUE)
+
+# For table.
+gt_1_cox_2022_t <- tbl_regression(mdl_1_cox_2022, exponentiate = FALSE) %>% 
+  add_significance_stars(hide_se = TRUE)
+gt_2_cox_2022_t <- tbl_regression(mdl_2_cox_2022, exponentiate = FALSE) %>% 
+  add_significance_stars(hide_se = TRUE)
+gt_3_cox_2022_t <- tbl_regression(mdl_3_cox_2022, exponentiate = FALSE) %>% 
+  add_significance_stars(hide_se = TRUE)
+gt_4_cox_2022_t <- tbl_regression(mdl_4_cox_2022, exponentiate = FALSE) %>% 
+  add_significance_stars(hide_se = TRUE)
+gt_5_cox_2022_t <- tbl_regression(mdl_5_cox_2022, exponentiate = FALSE) %>% 
+  add_significance_stars(hide_se = TRUE)
+gt_6_cox_2022_t <- tbl_regression(mdl_6_cox_2022, exponentiate = FALSE) %>% 
+  add_significance_stars(hide_se = TRUE)
+gt_9_cox_2022_t <- tbl_regression(mdl_9_cox_2022, exponentiate = FALSE) %>% 
   add_significance_stars(hide_se = TRUE)
 
 gtsummary::tbl_merge(
- list(gt_1_cox_2022, gt_2_cox_2022, gt_3_cox_2022, gt_4_cox_2022, gt_5_cox_2022, 
-      gt_6_cox_2022, gt_9_cox_2022), 
+ list(gt_1_cox_2022_t, gt_2_cox_2022_t, gt_3_cox_2022_t, gt_4_cox_2022_t, 
+      gt_5_cox_2022_t, gt_6_cox_2022_t, gt_9_cox_2022_t), 
  tab_spanner = c("Model 1", "Model 2", "Model 3", "Model 4", "Model 5", 
                  "Model 6", "Model 9")
 ) 
 ```
 
-Model 1 shows that the odds of death increase with age. Players aged 40–44 are `r gtsummary::inline_text(gt_1_cox_2022, age, "[40,45)")` times as likely to die over the follow-up period as players aged 20–24 (Authors report exp(1.32) = 3.74), those aged 50–54 are `r gtsummary::inline_text(gt_1_cox_2022, age, "[50,55)")` times as likely to die (Authors report exp(2.39) = 10.9), and players aged 70–74 are `r gtsummary::inline_text(gt_1_cox_2022, age, "[70,75)")` times as likely to die (Authors report exp(4.00) = 54.6). The **Lahman**-based data produced higher mortality risk estimates at all age groups for Model 1.
+```{r include=FALSE, eval=FALSE, fig.height=10, fig.width=7.5}
+cox_dat %>% 
+  mutate(debut_age = time_length(interval(birthDate, debut), "years")) %>%
+  filter(decade == "[1960-1970)") %>%
+  filter(age == "[60,65)") %>%
+  select(playerID, birthDate, debut, debut_age, tstart, tstop, death, decade, age, fu_time, fu_status) 
 
-Model 2 shows that, adjusting for age, more recent calendar periods are associated with lower risks of death. The greatest declines in mortality took place between the 1920–1929 and 1930–1939 periods, exp(`r tidy(mdl_2_lr_2004, exponentiate = FALSE) %>% filter(term == "period_bin[1920,1930)") %>% pull(estimate) %>% comma(.01)`) = `r tidy(mdl_2_lr_2004, exponentiate = TRUE) %>% filter(term == "period_bin[1920,1930)") %>% pull(estimate) %>% comma(.01)` to exp(`r tidy(mdl_2_lr_2004, exponentiate = FALSE) %>% filter(term == "period_bin[1930,1940)") %>% pull(estimate) %>% comma(.01)`) = `r tidy(mdl_2_lr_2004, exponentiate = TRUE) %>% filter(term == "period_bin[1930,1940)") %>% pull(estimate) %>% comma(.01)` (Authors report exp(-.54) = 0.58 to exp(-1.08) = 0.34), and between the 1960–1969 and 1970–2004 periods, exp(`r tidy(mdl_2_lr_2004, exponentiate = FALSE) %>% filter(term == "period_bin[1960,1970)") %>% pull(estimate) %>% comma(.01)`) = `r tidy(mdl_2_lr_2004, exponentiate = TRUE) %>% filter(term == "period_bin[1960,1970)") %>% pull(estimate) %>% comma(.01)` to exp(`r tidy(mdl_2_lr_2004, exponentiate = FALSE) %>% filter(term == "period_bin[1970,Inf)") %>% pull(estimate) %>% comma(.01)`) = `r tidy(mdl_2_lr_2004, exponentiate = TRUE) %>% filter(term == "period_bin[1970,Inf)") %>% pull(estimate) %>% comma(.01)`) (Authors report exp(-1.47) = 0.23 to exp(-1.97) = 0.14). The **Lahman**-based data produced a slightly larger negative association between mortality risk and calendar period for the first two periods, and a smaller association for the remaining periods. 
+cox_dat %>% janitor::tabyl(age, death) %>% janitor::adorn_percentages() %>% 
+  janitor::adorn_pct_formatting() %>% janitor::adorn_ns()
 
-The Authors' Model 3 shows that the coefficients for period and age are reduced but remain strong predictors of mortality after adjusting for the cohort of debut. The **Lahman**-based data produce a similar result. Compared to those debuting during the Early period (1902-1945), players debuting in the Golden period (1946-1968) were exp(`r tidy(mdl_3_lr_2004, exponentiate = FALSE) %>% filter(term == "cohortGolden") %>% pull(estimate) %>% comma(.01)`) = `r tidy(mdl_3_lr_2004, exponentiate = TRUE) %>% filter(term == "cohortGolden") %>% pull(estimate) %>% comma(.01)` as likely to die (Authors report exp(-0.49) = 0.61), and players debuting in the Modern period (1969+) were exp(`r tidy(mdl_3_lr_2004, exponentiate = FALSE) %>% filter(term == "cohortModern") %>% pull(estimate) %>% comma(.01)`) = `r tidy(mdl_3_lr_2004, exponentiate = TRUE) %>% filter(term == "cohortModern") %>% pull(estimate) %>% comma(.01)` as likely to die (Authors report exp(-1.02) = 0.36). The **Lahman**-based data produced a smaller benefit from more recent cohorts. The reduction in the period coefficients is due to the correlation between debut era and the period bins. In the plot below, all Modern era player-year records are (by definition) in the 1970+ period.
+cox_dat %>% 
+  filter(decade == "[1970-Inf)") %>%
+  # filter(age == "[0,25)") %>%
+  group_by(decade, age) %>%
+  summarize(.groups = "drop", n = n(), n_dead = sum(death), fu_status = mean(death), fu_time = mean(tstop - tstart))
 
-```{r}
-person_year_2004 %>%
-  count(period_bin, cohort) %>%
-  ggplot(aes(x = period_bin, y = n, fill = cohort)) +
-  geom_col() +
-  theme_light() + 
-  theme(axis.text.x = element_text(angle = 90)) +
-  labs(y = "player-years", fill = NULL, 
-       title = "Period and Cohort (Debut Era) Association")
+new_dat <- data.frame(age = c("[0,25)", "[40,45)")) %>% mutate(strata = as.factor(row_number()))
+preds_0 <- survfit(mdl_1_cox_2022, newdata = new_dat, data = cox_dat)
+preds_1 <- surv_summary(preds_0)
+preds_1 %>% inner_join(new_dat, by = "strata") %>%
+  ggplot(aes(x = time, y = surv, color = age, fill = age)) + geom_line() +
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.4) +
+  scale_x_continuous(limits = c(0,10)) + scale_y_continuous(limits = c(.97, 1))
+
+km_fit <- survfit(Surv(tstop, death) ~ age, data = cox_dat %>% filter(decade == "[1960-1970)"))
+km_fit %>% ggsurvplot(risk.table = TRUE)
 ```
 
-Models 4, 5, and 6 estimate insignificant (at .05 level) associations between risk and obesity (exp(`r tidy(mdl_4_lr_2004, exponentiate = FALSE) %>% filter(term == "bmi_fct_2Obese") %>% pull(estimate) %>% comma(.01)`) = `r tidy(mdl_4_lr_2004, exponentiate = TRUE) %>% filter(term == "bmi_fct_2Obese") %>% pull(estimate) %>% comma(.01)`, Authors report exp(.57) = 1.77), height over six feet (exp(`r tidy(mdl_5_lr_2004, exponentiate = FALSE) %>% filter(term == "height_fct_2>=6 feet") %>% pull(estimate) %>% comma(.01)`) = `r tidy(mdl_5_lr_2004, exponentiate = TRUE) %>% filter(term == "height_fct_2>=6 feet") %>% pull(estimate) %>% comma(.01)`, Authors report exp(.03) = 1.03), and left-handedness (exp(`r tidy(mdl_6_lr_2004, exponentiate = FALSE) %>% filter(term == "throws_2Left Handed") %>% pull(estimate) %>% comma(.01)`) = `r tidy(mdl_6_lr_2004, exponentiate = TRUE) %>% filter(term == "throws_2Left Handed") %>% pull(estimate) %>% comma(.01)`, Authors report exp(-.02) = 0.98).
+<br>
+Model 1 shows that the odds of death increase with age after age 50. Players aged 50–54 are `r gtsummary::inline_text(gt_1_cox_2022, age, "[50,55)")` times as likely to die over the follow-up period as players aged 20–24 (Authors report exp(2.39) = 10.91). Whereas the discrete time logistic regression estimated a monotonically increasing mortality risk with statistically significant (.05 level) coefficients beginning at age bin 35-39, the **Lahman**-based data produced the lowest risk at the age 25-29 age range. The difference may be due to the model precision. Players aged 0-25 are not equally distributed in age. The average debut age was `r person %>% summarize(x = mean(time_length(interval(birthDate, debut), "years"))) %>% pull(x) %>% scales::comma(.1)`; most debut closer age 25. Older age groups are more likely to have players equally distributed within the 5 year age bucket. In effect, the discrete time model was comparing five-year mortality risk to a reference group of 24 year-olds surviving to age 25. The discrete time analysis does not account for time spent in an age interval, Cox does.
 
-Finally, those who play for 10 or more years have (1 - exp(`r tidy(mdl_9_lr_2004, exponentiate = FALSE) %>% filter(term == "career_length_fct10+ years") %>% pull(estimate) %>% comma(.01)`)) * 100 = `r tidy(mdl_9_lr_2004, exponentiate = TRUE) %>% filter(term == "career_length_fct10+ years") %>% mutate(lwr = (1 - estimate) * 100) %>% pull(lwr) %>% comma(1)` percent lower odds of death over the follow-up period than those who have shorter careers (Model 9). The Authors report 14 percent lower odds.
+Model 2 shows that, adjusting for age, more recent calendar periods are associated with lower risks of death. The 1920–1929 decade mortality risk was `r gtsummary::inline_text(gt_2_cox_2022, decade, "[1920-1930)")` times that of the 1900-1909 decade (Authors report exp(-.54) = 0.58). The **Lahman**-based data produced a slightly stronger negative association between mortality risk and calendar period. 
 
+Model 3 shows that era of debut is negatively associated with mortality risk. A player debuting in the Modern era faced a mortality risk `r gtsummary::inline_text(gt_3_cox_2022, cohort, "Modern")` times that of an Early era player (Authors report exp(-1.02) = 0.36). The **Lahman**-based data produced a slightly weaker negative association between mortality risk and cohort. 
 
+Model 4 estimated a statistically significant increased mortality risk associated with being overweight. The Authors did not measure a statistically significant relationship. An overweight player's mortality risk is `r gtsummary::inline_text(gt_4_cox_2022, bmi_fct_2, "Overweight")` that of a player of normal weight. The Authors report exp(0.04) = 1.04.
 
-<br>The "all in" model estimates similar cohort effects as the univariate model, meaning the effect of cohort did not change after controlling for the other covariates. Compared to players debuting in the Early era, a Modern era player enjoyed a much lower morbidity risk (HR `r gtsummary::inline_text(gt_all_cox, cohort, "Modern")`). BMI was not significant in the univariate model, but was significant at the .05 level for both the Overweight level (HR `r gtsummary::inline_text(gt_all_cox, bmi_fct_2, "Overweight")`) and the Obese level (HR `r gtsummary::inline_text(gt_all_cox, bmi_fct_2, "Obese")`). The mortality risk of being overweight was minor, but is much higher for obese players. Height was not significant in the multivariate model, but was significant in the univariate model, perhaps because it is correlated with cohort. Career length was significant in both models. Players with careers over 10 years had a slightly lower morbidity risk (HR `r gtsummary::inline_text(gt_all_cox, career_length_fct, "10+ years")`).
+Models 5 and 6 estimated mortality associates with height and with handedness that were not different from 0 at the .05 confidence level, in aggreement with the Authors finding.
 
-Cox regression should produce similar results to logistic regression when sample sizes are large. I tested that by fitting the equivalent models with logistic regression using a complementary log-log link function.
+Model 9 shows that those who play for 10 or more years have `r gtsummary::inline_text(gt_9_cox_2022, career_length_fct, "10+ years")` times the mortality risk of those who have shorter careers (Authors report exp(-.15) = .86).
 
-```{r}
-mdl_3_lr <- glm(status ~ cohort, data = person_year,
-                family = binomial(link = "cloglog"))
-# mdl_4_lr <- glm(status ~ yr + bmi_fct_2, data = person_year, 
-#                 family = binomial(link = "cloglog"))
-# mdl_5_lr <- glm(status ~ yr + height_fct_2, data = person_year, 
-#                 family = binomial(link = "cloglog"))
-# mdl_6_lr <- glm(status ~ yr + throws_2, data = person_year, family = 
-#                   binomial(link = "cloglog"))
-# mdl_9_lr <- glm(status ~ yr + career_length_fct, data = person_year, 
-#                 family = binomial(link = "cloglog"))
-mdl_all_lr <- glm(status ~ cohort + bmi_fct_2 + height_fct_2 + 
-                      throws_2 + career_length_fct, 
-                data = person_year, family = binomial(link = "cloglog"))
+The logistic regression facilitated the construction of life tables. The Cox proportional hazards model does not do that, but instead, the model can be used to predict survival at selected predictor levels. The plots below compare cohort survival expectations for right-handed players over 6 feet with a career length under ten years. The plots are faceted by player BMI.
 
-gtsummary::tbl_regression(mdl_3_lr, exponentiate = TRUE)
-# gt_4_lr <- gtsummary::tbl_regression(mdl_4_lr, exponentiate = TRUE)
-# gt_5_lr <- gtsummary::tbl_regression(mdl_5_lr, exponentiate = TRUE)
-# gt_6_lr <- gtsummary::tbl_regression(mdl_6_lr, exponentiate = TRUE)
-# gt_9_lr <- gtsummary::tbl_regression(mdl_9_lr, exponentiate = TRUE)
-gt_all_lr <- gtsummary::tbl_regression(mdl_all_lr, exponentiate = TRUE)
-
-# gt_univariate_lr <- gtsummary::tbl_stack(
-#   list(gt_3_lr, gt_4_lr, gt_5_lr, gt_6_lr, gt_9_lr), 
-#   group_header = c("Model 3", "Model 4", "Model 5", "Model 6", "Model 9"))
-
-# gtsummary::tbl_merge(
-#   list(gt_univariate, gt_all_cox, gt_univariate_lr, gt_all_lr), 
-#   tab_spanner = c("Univariate", "All In", "Logistic", "Logistic (all-in)"))
-
-gtsummary::tbl_merge(
-  list(gt_all_cox, gt_all_lr), 
-  tab_spanner = c("Cox", "Logistic"))
-```
-
-<br>The logistic regression facilitated the construction of life tables. The Cox proportional hazards model does not do that, but instead, the model can be used to predict survival at selected predictor levels. The plots below compare cohort survival expectations for right-handed players over 6 feet with a career length under ten years. The plots are faceted by player BMI.
-
-```{r}
+```{r eval=FALSE}
 # x <- person %>%
 #   mutate(
 #     fu_date = coalesce(deathDate, max(person$deathDate, na.rm = TRUE)),
@@ -1103,54 +1080,54 @@ gtsummary::tbl_merge(
 # y <- survfit(Surv(fu_time, fu_status) ~ cohort, data = x)
 # survminer::ggsurvplot(y, surv.median.line = "hv")
 # 
-mdl_0_cox <- coxph(Surv(fu_time, fu_status) ~ age_at_debut + cohort, data = cox_dat)
-
-new_data <- expand.grid(
-  age_at_debut = 25,
-  cohort = levels(cox_dat$cohort)
-) %>% mutate(strata = as.factor(row_number()))
-pred_cox_0 <- survfit(mdl_0_cox, newdata = new_data, dat = cox_dat)
-pred_cox_1 <- survminer::surv_summary(pred_cox_0)
-pred_cox <- pred_cox_1 %>% inner_join(new_data, by = "strata")
-
-pred_cox %>%
-  ggplot(aes(x = time + 25, y = surv, color = cohort, fill = cohort)) +
-  geom_line() +
-  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.4) +
-  geom_hline(yintercept = 0.5, linetype = 2, color = "firebrick") +
-  theme_light() +
-  theme(legend.position = "top") +
-  labs(title = "Cox fitted model",
-       subtitle = "Right-handed players >6 feet with a career length < 10 yrs.") 
+# mdl_0_cox <- coxph(Surv(fu_time, fu_status) ~ age_at_debut + cohort, data = cox_dat)
+# 
+# new_data <- expand.grid(
+#   age_at_debut = 25,
+#   cohort = levels(cox_dat$cohort)
+# ) %>% mutate(strata = as.factor(row_number()))
+# pred_cox_0 <- survfit(mdl_0_cox, newdata = new_data, dat = cox_dat)
+# pred_cox_1 <- survminer::surv_summary(pred_cox_0)
+# pred_cox <- pred_cox_1 %>% inner_join(new_data, by = "strata")
+# 
+# pred_cox %>%
+#   ggplot(aes(x = time + 25, y = surv, color = cohort, fill = cohort)) +
+#   geom_line() +
+#   geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.4) +
+#   geom_hline(yintercept = 0.5, linetype = 2, color = "firebrick") +
+#   theme_light() +
+#   theme(legend.position = "top") +
+#   labs(title = "Cox fitted model",
+#        subtitle = "Right-handed players >6 feet with a career length < 10 yrs.") 
 ```
 
-```{r}
-new_data <- expand.grid(
-  age_at_debut = 25,
-  decade = levels(cox_dat$decade)[5],
-  cohort = levels(cox_dat$cohort),
-  bmi_fct_2 = levels(cox_dat$bmi_fct_2),
-  height_fct_2 = ">=6 feet",
-  throws_2 = "Right Handed",
-  career_length_fct = levels(cox_dat$career_length_fct)[1]
-) %>% mutate(strata = as.factor(row_number()))
-
-pred_cox_0 <- survfit(mdl_allin_cox, newdata = new_data, dat = cox_dat)
-
-pred_cox_1 <- survminer::surv_summary(pred_cox_0)
-
-pred_cox <- pred_cox_1 %>% inner_join(new_data, by = "strata")
-
-pred_cox %>%
-  ggplot(aes(x = time + 25, y = surv, color = cohort, fill = cohort)) +
-  geom_line() +
-  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.4) +
-  geom_hline(yintercept = 0.5, linetype = 2, color = "firebrick") +
-  facet_wrap(facets = vars(bmi_fct_2)) +
-  theme_light() +
-  theme(legend.position = "top") +
-  labs(title = "Cox fitted model",
-       subtitle = "Right-handed players >6 feet with a career length < 10 yrs.") 
+```{r eval=FALSE}
+# new_data <- expand.grid(
+#   age_at_debut = 25,
+#   decade = levels(cox_dat$decade)[5],
+#   cohort = levels(cox_dat$cohort),
+#   bmi_fct_2 = levels(cox_dat$bmi_fct_2),
+#   height_fct_2 = ">=6 feet",
+#   throws_2 = "Right Handed",
+#   career_length_fct = levels(cox_dat$career_length_fct)[1]
+# ) %>% mutate(strata = as.factor(row_number()))
+# 
+# pred_cox_0 <- survfit(mdl_3_cox_2022, newdata = new_data, dat = cox_dat)
+# 
+# pred_cox_1 <- survminer::surv_summary(pred_cox_0)
+# 
+# pred_cox <- pred_cox_1 %>% inner_join(new_data, by = "strata")
+# 
+# pred_cox %>%
+#   ggplot(aes(x = time + 25, y = surv, color = cohort, fill = cohort)) +
+#   geom_line() +
+#   geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.4) +
+#   geom_hline(yintercept = 0.5, linetype = 2, color = "firebrick") +
+#   facet_wrap(facets = vars(bmi_fct_2)) +
+#   theme_light() +
+#   theme(legend.position = "top") +
+#   labs(title = "Cox fitted model",
+#        subtitle = "Right-handed players >6 feet with a career length < 10 yrs.") 
 ```
 
 # References
