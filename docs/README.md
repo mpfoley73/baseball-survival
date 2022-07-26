@@ -1,18 +1,12 @@
 This project is a statistical analysis of the association between longevity (life expectancy) and fame in Major League baseball. It is inspired by Redelmeier and Singh's [survival in Oscar winners study](http://fisher.utstat.toronto.edu/reid/sta442f/2009/aawards.pdf) which found that winning an Academy Award was associated with 3.9 years of additional life expectancy. In this setting, fame conferred by induction into the baseball Hall of Fame replaces the Academy Award.
 
-## Project Plan
+## What the project does
 
 * **Evaluate data sources**. There are at least two data sources that can support this project. [Retrosheet](https://www.retrosheet.org/biofile.htm) publishes a single text file of players that is easy to work with and comprehensive, but somewhat limited in the number of attributes. [Lahman's Baseball Database](https://www.seanlahman.com/baseball-archive/statistics/) is an entire data model. It has an associated [R package](https://github.com/cdalzell/Lahman) and it was also used in [a similar study](http://www.med.mcgill.ca/epidemiology/hanley/bios601/CandHchapter06/baseball_players.pdf) by Abel and Kruger.
 * **Review Literature**. The two studies referenced above lay the foundation that this study will build upon. In addition, Redelmeier and Singh recently published [an update to their Academy study](https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0266563) in PLoS ONE.
   * **abel_kruger_2005** ([html](./abel_kruger_2005.html), [Rmd](../src/abel_kruger_2005.Rmd)). Reproduction of Abel & Kruger 2005 study (incomplete - I'm struggling with the data setup.)
-  * **saint_onge_2008** ([html](./saint_onge_2008.html), [Rmd](../src/saint_onge_2008.Rmd)). Reproduction of *Major League Baseball Players' Life Expectancies* ([2008](#SaintOnge2008)).
+  * **saint_onge_2008** ([html](./saint_onge_2008.html), [Rmd](../src/saint_onge_2008.Rmd)). Review of *Major League Baseball Players' Life Expectancies* ([2008](#SaintOnge2008)). Partially reproduces the 2008 analysis using the **Lahman** data, re-fits their discrete-time logistic regression models with data updated through the 2021 season, and fits an alternative Cox proportional hazards model.
 * **Groundwork**. The Abel and Kruger study is so similar to this study, both is subject and data source, that reproducing their results will be a good exercise in working with the data.
-
-
-
-## What the project does
-
-TBD. This project is a survival analysis. 
 
 ## Why the project is useful
 
@@ -46,5 +40,5 @@ Smith G. The Baseball Hall of Fame is not the kiss of death. Death Stud. 2011 No
 
 Sylvestre, Marie-Pierre & Huszti, Ella & Hanley, James. (2006). Do Oscar Winners Live Longer than Less Successful Peers? A Reanalysis of the Evidence. Annals of internal medicine. 145. 361-3; discussion 392. 10.7326/0003-4819-145-5-200609050-00009. [PDF](https://www.researchgate.net/publication/6836472_Do_Oscar_Winners_Live_Longer_than_Less_Successful_Peers_A_Reanalysis_of_the_Evidence).
 
-[Survival Analysis](https://bookdown.org/mpfoley1973/supervised-ml/survival-analysis.html). My supervised machine learning notes on surival analysis.
+[Survival Analysis](https://bookdown.org/mpfoley1973/supervised-ml/survival-analysis.html). My supervised machine learning notes on survival analysis.
 
