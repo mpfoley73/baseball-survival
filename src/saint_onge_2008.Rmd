@@ -1,6 +1,6 @@
 ---
-title: "Review of Major League Baseball Players' Life Expectancies"
-subtitle: "Reproducing and Updating the 2008 Saint Onge, Rogers, and Krueger Study"
+title: "Major League Baseball Players' Life Expectancies"
+subtitle: "Reproduction and Update to Saint Onge, Rogers, and Krueger (2008)"
 author: "Michael Foley"
 date: "`r Sys.Date()`"
 output: 
@@ -19,13 +19,13 @@ knit: (function(inputFile, encoding) {
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-In their 2008 study, *Major League Baseball Players’ Life Expectancies*, Saint Onge et al. ([2008](#SaintOnge2008)) (the Authors) used major league baseball (MLB) player data from the *Total Baseball* ([2004](#TotalBaseball])) encyclopedia to evaluate the role of anthropomorphic measures (height, body mass, handedness) and performance measures (career length, total player rating) on longevity. Using a discrete time hazards model, the Authors found:
+In their 2008 study, *Major League Baseball Players’ Life Expectancies*, Saint Onge et al. ([2008](#SaintOnge2008)) (the Authors) used major league baseball (MLB) player data from the *Total Baseball* ([2004](#TotalBaseball])) encyclopedia to evaluate the role of anthropomorphic measures (height, body mass, and handedness) and performance measures (career length and total player rating) on longevity. Using a discrete time hazards model, the Authors found:
 
 * Compared to 20-year-old U.S. males, MLB players can expect almost five additional years of life, 
-* Height, weight, handedness, and player ratings are not associated with the risk of death, and
-* Career length is inversely associated with the risk of death.
+* Height, weight, handedness, and player ratings are *not* associated with the risk of death, but
+* Career length *is* inversely associated with the risk of death.
 
-This workbook reproduces the analysis with an alternative data source, Sean Lahman's Baseball Database ([2022](#Lahman)). The Authors' findings are confirmed except that instead of five additional years of life for 20-year-old MLB players, only **three years** are expected. Updating the data through the 2021 season, measured mortality risk was lower than that calculated from the 2004 data, predicting **4.5 years** of additional life for 20-year-old MLB players. A Cox proportional hazards model confirmed the Authors' findings that height, weight, and handedness are not associated with risk of death, and career length is inversely associated with risk of death.
+This workbook reproduces the analysis with an alternative data source, Sean Lahman's Baseball Database ([2022](#Lahman)). Differences in players included in the data and their attributes resulted in slightly different coefficient estimates. The Authors' findings were generally confirmed except that instead of an expected five additional years of life for 20-year-old MLB players, the **Lahman**-based data produced estimates of only **three additional years**. Fitting the models with data updated through the 2021 season resulted in *lower* measured mortality risks that are in closer alignment with the Authors' findings. A 20-year-old MLB player can expect an additional **4.5 years** of additional life over comparable U.S. males. A Cox proportional hazards model with time-dependent covariates confirmed the Authors' findings that height, weight, and handedness are not associated with risk of death, and career length is inversely associated with risk of death.
 
 ```{r include=FALSE}
 library(tidyverse)
@@ -143,7 +143,7 @@ person_2 <- person_1 %>%
   select(-c(birthMonth, birthDay))
 ```
 
-The Authors note that the youngest age at death was for Al Montgomery (22.5 years). The **Lahman** data confirms that Montgomery was the youngest, but reports an age of 21.8 years. 
+The Authors noted that the youngest age at death was for Al Montgomery, 22.5 years. The **Lahman** data confirms that Montgomery was the youngest, but his age at death was 21.8 years. 
 
 ```{r}
 person_2 %>% 
@@ -154,9 +154,9 @@ person_2 %>%
   head()
 ```
 
-The discrepancy may be explained by how the Authors calculated ages. They calculate age for each person-year as the number of years (and fractions of years) between the date of birth and January 1 of the calendar year in each person-year. So Montgomery's age on January 1, 1943 would have been 22.5. This would seem to bias lifetimes upward by up to one year.
+The discrepancy may be explained by how the ages are calculated. The Authors calculates age by person-year. For each calendar year, the player's age was the number of years between the date of birth and January 1 of the calendar year. So Montgomery's age on January 1, 1943 would have been 22.5.^[This would seem to bias ages downward and estimated lifetimes *upward* by up to one year.]
 
-Otherwise, the implied ages look reasonable. The following plot of the age distributions has reasonable begin, end, and peak years. The mode age for deceased players is about 82 years.
+Otherwise, the birth and death dates are reasonable. The following plot of the age distributions for deceased and living players has reasonable endpoints and modes. The mode age for deceased players is about 82 years.
 
 ```{r}
 person_2 %>% 
@@ -845,7 +845,7 @@ There is no need to develop person-year rows for Cox regression. Instead, define
 ```{r}
 cox_dat_0 <- person %>%
   mutate(
-    age_at_debut = time_length(interval(birthDate, debut), unit = "year"),
+    debut_age = time_length(interval(birthDate, debut), unit = "year"),
     # follow-up time is earlier of two dates: death or data set date.
     fu_date = coalesce(deathDate, max(person$deathDate, na.rm = TRUE)),
     fu_time = time_length(interval(debut, fu_date), unit = "year"),
@@ -853,28 +853,28 @@ cox_dat_0 <- person %>%
     # Decade indicators are instrumental variables capturing general advances
     # in life-extending medical technology. *_time = years from debut to start of
     # decade. If debut is in middle of a decade, then *_time is 0 years.
-    pd1900_status = "[1900-1910)",
+    pd1900_status = "[1900,1910)",
     pd1900_time = pmax(time_length(interval(debut, ym(190001)), unit = "year"), 0),
     pd1900_time = if_else(fu_date >= ym(190001) & debutYear < 1910, pd1900_time, NA_real_),
-    pd1910_status = "[1910-1920)",
+    pd1910_status = "[1910,1920)",
     pd1910_time = pmax(time_length(interval(debut, ym(191001)), unit = "year"), 0),
     pd1910_time = if_else(fu_date >= ym(191001) & debutYear < 1920, pd1910_time, NA_real_),
-    pd1920_status = "[1920-1930)",
+    pd1920_status = "[1920,1930)",
     pd1920_time = pmax(time_length(interval(debut, ym(192001)), unit = "year"), 0),
     pd1920_time = if_else(fu_date >= ym(192001) & debutYear < 1930, pd1920_time, NA_real_),
-    pd1930_status = "[1930-1940)",
+    pd1930_status = "[1930,1940)",
     pd1930_time = pmax(time_length(interval(debut, ym(193001)), unit = "year"), 0),
     pd1930_time = if_else(fu_date >= ym(193001) & debutYear < 1940, pd1930_time, NA_real_),
-    pd1940_status = "[1940-1950)",
+    pd1940_status = "[1940,1950)",
     pd1940_time = pmax(time_length(interval(debut, ym(194001)), unit = "year"), 0),
     pd1940_time = if_else(fu_date >= ym(194001) & debutYear < 1950, pd1940_time, NA_real_),
-    pd1950_status = "[1950-1960)",
+    pd1950_status = "[1950,1960)",
     pd1950_time = pmax(time_length(interval(debut, ym(195001)), unit = "year"), 0),
     pd1950_time = if_else(fu_date >= ym(195001) & debutYear < 1960, pd1950_time, NA_real_),
-    pd1960_status = "[1960-1970)",
+    pd1960_status = "[1960,1970)",
     pd1960_time = pmax(time_length(interval(debut, ym(196001)), unit = "year"), 0),
     pd1960_time = if_else(fu_date >= ym(196001) & debutYear < 1970, pd1960_time, NA_real_),
-    pd1970_status = "[1970-Inf)",
+    pd1970_status = "[1970,Inf)",
     pd1970_time = pmax(time_length(interval(debut, ym(197001)), unit = "year"), 0),
     pd1970_time = if_else(fu_date >= ym(197001) & debutYear < 9999, pd1970_time, NA_real_),
     age00_status = "[0,25)",
@@ -1015,119 +1015,82 @@ gtsummary::tbl_merge(
 ) 
 ```
 
-```{r include=FALSE, eval=FALSE, fig.height=10, fig.width=7.5}
-cox_dat %>% 
-  mutate(debut_age = time_length(interval(birthDate, debut), "years")) %>%
-  filter(decade == "[1960-1970)") %>%
-  filter(age == "[60,65)") %>%
-  select(playerID, birthDate, debut, debut_age, tstart, tstop, death, decade, age, fu_time, fu_status) 
-
-cox_dat %>% janitor::tabyl(age, death) %>% janitor::adorn_percentages() %>% 
-  janitor::adorn_pct_formatting() %>% janitor::adorn_ns()
-
-cox_dat %>% 
-  filter(decade == "[1970-Inf)") %>%
-  # filter(age == "[0,25)") %>%
-  group_by(decade, age) %>%
-  summarize(.groups = "drop", n = n(), n_dead = sum(death), fu_status = mean(death), fu_time = mean(tstop - tstart))
-
-new_dat <- data.frame(age = c("[0,25)", "[40,45)")) %>% mutate(strata = as.factor(row_number()))
-preds_0 <- survfit(mdl_1_cox_2022, newdata = new_dat, data = cox_dat)
-preds_1 <- surv_summary(preds_0)
-preds_1 %>% inner_join(new_dat, by = "strata") %>%
-  ggplot(aes(x = time, y = surv, color = age, fill = age)) + geom_line() +
-  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.4) +
-  scale_x_continuous(limits = c(0,10)) + scale_y_continuous(limits = c(.97, 1))
-
-km_fit <- survfit(Surv(tstop, death) ~ age, data = cox_dat %>% filter(decade == "[1960-1970)"))
-km_fit %>% ggsurvplot(risk.table = TRUE)
-```
-
 <br>
 Model 1 shows that the odds of death increase with age after age 50. Players aged 50–54 are `r gtsummary::inline_text(gt_1_cox_2022, age, "[50,55)")` times as likely to die over the follow-up period as players aged 20–24 (Authors report exp(2.39) = 10.91). Whereas the discrete time logistic regression estimated a monotonically increasing mortality risk with statistically significant (.05 level) coefficients beginning at age bin 35-39, the **Lahman**-based data produced the lowest risk at the age 25-29 age range. The difference may be due to the model precision. Players aged 0-25 are not equally distributed in age. The average debut age was `r person %>% summarize(x = mean(time_length(interval(birthDate, debut), "years"))) %>% pull(x) %>% scales::comma(.1)`; most debut closer age 25. Older age groups are more likely to have players equally distributed within the 5 year age bucket. In effect, the discrete time model was comparing five-year mortality risk to a reference group of 24 year-olds surviving to age 25. The discrete time analysis does not account for time spent in an age interval, Cox does.
 
-Model 2 shows that, adjusting for age, more recent calendar periods are associated with lower risks of death. The 1920–1929 decade mortality risk was `r gtsummary::inline_text(gt_2_cox_2022, decade, "[1920-1930)")` times that of the 1900-1909 decade (Authors report exp(-.54) = 0.58). The **Lahman**-based data produced a slightly stronger negative association between mortality risk and calendar period. 
+Model 2 shows that, adjusting for age, more recent calendar periods are associated with lower risks of death. The 1920–1929 decade mortality risk was `r gtsummary::inline_text(gt_2_cox_2022, decade, "[1920,1930)")` times that of the 1900-1909 decade (Authors report exp(-.54) = 0.58). The **Lahman**-based data produced a slightly stronger negative association between mortality risk and calendar period. 
 
 Model 3 shows that era of debut is negatively associated with mortality risk. A player debuting in the Modern era faced a mortality risk `r gtsummary::inline_text(gt_3_cox_2022, cohort, "Modern")` times that of an Early era player (Authors report exp(-1.02) = 0.36). The **Lahman**-based data produced a slightly weaker negative association between mortality risk and cohort. 
 
 Model 4 estimated a statistically significant increased mortality risk associated with being overweight. The Authors did not measure a statistically significant relationship. An overweight player's mortality risk is `r gtsummary::inline_text(gt_4_cox_2022, bmi_fct_2, "Overweight")` that of a player of normal weight. The Authors report exp(0.04) = 1.04.
 
-Models 5 and 6 estimated mortality associates with height and with handedness that were not different from 0 at the .05 confidence level, in aggreement with the Authors finding.
+Models 5 and 6 estimated mortality associates with height and with handedness that were not different from 0 at the .05 confidence level, in agreement with the Authors finding.
 
 Model 9 shows that those who play for 10 or more years have `r gtsummary::inline_text(gt_9_cox_2022, career_length_fct, "10+ years")` times the mortality risk of those who have shorter careers (Authors report exp(-.15) = .86).
 
-The logistic regression facilitated the construction of life tables. The Cox proportional hazards model does not do that, but instead, the model can be used to predict survival at selected predictor levels. The plots below compare cohort survival expectations for right-handed players over 6 feet with a career length under ten years. The plots are faceted by player BMI.
-
 ```{r eval=FALSE}
-# x <- person %>%
-#   mutate(
-#     fu_date = coalesce(deathDate, max(person$deathDate, na.rm = TRUE)),
-#     fu_time = time_length(interval(birthDate, fu_date), unit = "year"),
-#     fu_status = if_else(is.na(deathDate), 0, 1),
-#     age_at_death = time_length(interval(birthDate, deathDate), "year")
-#   ) 
-# y <- survfit(Surv(fu_time, fu_status) ~ cohort, data = x)
-# survminer::ggsurvplot(y, surv.median.line = "hv")
+# tdy_2022 <- mdl_2_cox_2022 %>% broom::tidy()
 # 
-# x <- cox_dat %>%
+# life_tbl_2022 <- tibble(
+#   age_bin = rep(levels(cox_dat$age), 8),
+#   age_bin_term = paste0("age", age_bin),
+#   period_bin = map(levels(cox_dat$decade), ~rep(.x, 14)) %>% unlist(),
+#   period_bin_term = paste0("decade", period_bin),
+#   intercept = coef(mdl_2_cox_2022)["(Intercept)"],
+#   authors_e = rep(authors_e, 8),
+#   us_male_e = rep(us_male_e, 8)
+# ) %>%
+#   left_join(tdy_2022 %>% select(age_bin_term = term, age_bin_est = estimate), 
+#             by = "age_bin_term") %>%
+#   left_join(tdy_2022 %>% select(period_bin_term = term, period_bin_est = estimate), 
+#             by = "period_bin_term") %>%
+#   replace_na(list(age_bin_est = 0, period_bin_est = 0, intercept = 0)) %>%
+#   group_by(period_bin) %>%
 #   mutate(
-#     fu_date = coalesce(deathDate, max(person$deathDate, na.rm = TRUE)),
-#     fu_time = time_length(interval(birthDate, fu_date), unit = "year"),
-#     fu_status = if_else(is.na(deathDate), 0, 1),
-#     age_at_death = time_length(interval(birthDate, deathDate), "year")
+#     mx = 1 / (1 + exp(-(intercept + period_bin_est + age_bin_est))),
+#     nQx = (5 * mx) / (1 + 2.5 * mx),
+#     nQx_comp = 1 - nQx,
+#     nQx_cumprod = nQx_comp * lag(nQx_comp, n = 1, default = 1.0),
+#     lx = 100000 * lag(nQx_cumprod, n = 1, default = 1.0),
+#     ndx = lx * nQx,
+#     Lx = (lx - ndx) * 5
 #   ) %>%
-#   filter(!(cohort == "Modern (1969+)" & fu_time > 80 & age_at_death > 80))
-# y <- survfit(Surv(fu_time, fu_status) ~ cohort, data = x)
-# survminer::ggsurvplot(y, surv.median.line = "hv")
+#   arrange(period_bin, desc(age_bin)) %>%
+#   mutate(
+#     Tx = cumsum(Lx),
+#     ex = Tx / lx
+#   ) %>%
+#   ungroup() %>%
+#   arrange(period_bin, age_bin) %>%
+#   select(period_bin, age_bin, intercept, age_bin_est, period_bin_est, mx:ex, 
+#          authors_e, us_male_e)
 # 
-# mdl_0_cox <- coxph(Surv(fu_time, fu_status) ~ age_at_debut + cohort, data = cox_dat)
-# 
-# new_data <- expand.grid(
-#   age_at_debut = 25,
-#   cohort = levels(cox_dat$cohort)
-# ) %>% mutate(strata = as.factor(row_number()))
-# pred_cox_0 <- survfit(mdl_0_cox, newdata = new_data, dat = cox_dat)
-# pred_cox_1 <- survminer::surv_summary(pred_cox_0)
-# pred_cox <- pred_cox_1 %>% inner_join(new_data, by = "strata")
-# 
-# pred_cox %>%
-#   ggplot(aes(x = time + 25, y = surv, color = cohort, fill = cohort)) +
-#   geom_line() +
-#   geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.4) +
-#   geom_hline(yintercept = 0.5, linetype = 2, color = "firebrick") +
-#   theme_light() +
-#   theme(legend.position = "top") +
-#   labs(title = "Cox fitted model",
-#        subtitle = "Right-handed players >6 feet with a career length < 10 yrs.") 
+# life_tbl_2022 %>%
+#   filter(period_bin == "[1970,Inf)") %>%
+#   select(-period_bin) %>%
+#   life_flex() %>%
+#   flextable::set_caption("Table 5. Life Table, period 1970-2021 from Lahman-based data through 2021.")
 ```
 
-```{r eval=FALSE}
-# new_data <- expand.grid(
-#   age_at_debut = 25,
-#   decade = levels(cox_dat$decade)[5],
-#   cohort = levels(cox_dat$cohort),
-#   bmi_fct_2 = levels(cox_dat$bmi_fct_2),
-#   height_fct_2 = ">=6 feet",
-#   throws_2 = "Right Handed",
-#   career_length_fct = levels(cox_dat$career_length_fct)[1]
-# ) %>% mutate(strata = as.factor(row_number()))
-# 
-# pred_cox_0 <- survfit(mdl_3_cox_2022, newdata = new_data, dat = cox_dat)
-# 
-# pred_cox_1 <- survminer::surv_summary(pred_cox_0)
-# 
-# pred_cox <- pred_cox_1 %>% inner_join(new_data, by = "strata")
-# 
-# pred_cox %>%
-#   ggplot(aes(x = time + 25, y = surv, color = cohort, fill = cohort)) +
-#   geom_line() +
-#   geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.4) +
-#   geom_hline(yintercept = 0.5, linetype = 2, color = "firebrick") +
-#   facet_wrap(facets = vars(bmi_fct_2)) +
-#   theme_light() +
-#   theme(legend.position = "top") +
-#   labs(title = "Cox fitted model",
-#        subtitle = "Right-handed players >6 feet with a career length < 10 yrs.") 
+The logistic regression facilitated the construction of life tables. The Cox proportional hazards model does not do that, but instead, the model can be used to predict survival at selected predictor levels. The plots below compare cohort survival expectations for two age groups faceted by two decades. In the first facet, the median remaining life expectancy of a player aged 70 - 75 during the 1900-1910 decade is about 18 years. In the second facet, the median jumps to about 28 years.^[These values are absurdly high. I'm not sure what's going on here yet.]
+
+```{r}
+summary(mdl_2_cox_2022)
+
+new_dat <- expand.grid(
+  age = c("[0,25)", "[50,55)", "[70,75)"),
+  decade = c("[1900,1910)", "[1960,1970)")
+) %>%
+  mutate(strata = as.factor(row_number()))
+
+survfit(mdl_2_cox_2022, newdata = new_dat, data = cox_dat) %>% 
+  surv_summary() %>%
+  inner_join(new_dat, by = "strata") %>%
+  ggplot(aes(x = time, color = age, fill = age)) + 
+  geom_line(aes(y = surv)) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.4) +
+  geom_hline(yintercept = 0.5, linetype = 2) +
+  facet_wrap(facets = vars(decade))
 ```
 
 # References
