@@ -1,5 +1,6 @@
 ---
-title: "Reproducing the Abel and Kruger Study"
+title: "Major League Baseball Players' Life Expectancies"
+subtitle: "Reproduction and Update to Abel and Krueger (2005)"
 author: "Michael Foley"
 date: "`r Sys.Date()`"
 output: 
@@ -18,72 +19,211 @@ knit: (function(inputFile, encoding) {
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-Abel and Kruger ([2005](#Abel2005)) use professional baseball player data to evaluate the role of awarded achievement within the sport on longevity. The authors hypothesize that players inducted into the Baseball Hall of Fame have longer longevities than players of the same age who are not inducted. This workbook reproduces the results from the same source data and methods.
+In their 2005 study, *The Longevity of Baseball Hall of Famers Compared to Other Players*, Abel and Kruger ([2005](#Abel2005)) used major league baseball (MLB) player data from Sean Lahman's Baseball Database ([2022](#Lahman)) to evaluate the role of awarded achievement on longevity. Using a Cox proportional hazards model, Abel and Kruger ([2005](#Abel2005)) found that median post-induction survival for Hall of Famers was 5 years shorter than for noninducted players (18 vs. 23 years, respectively).
+
+This workbook reproduces the analysis with the 2021 release of the database (v2022.2) and updates the analysis with the newer data. <font color="yellow">Differences in players included in the data and their attributes resulted in slightly different coefficient estimates. The Authors' findings were generally confirmed except that instead of an expected five additional years of life for 20-year-old MLB players, the **Lahman**-based data produced estimates of only **three additional years**. Fitting the models with data updated through the 2021 season resulted in *lower* measured mortality risks that are in closer alignment with the Authors' findings. A 20-year-old MLB player can expect an additional **4.5 years** of additional life over comparable U.S. males. A Cox proportional hazards model with time-dependent covariates confirmed the Authors' findings that height, weight, and handedness are not associated with risk of death, and career length is inversely associated with risk of death.</font>
 
 ```{r include=FALSE}
-# library(Lahman)  # has latest data
 library(tidyverse)
 library(lubridate)
 library(scales)
+library(Lahman)
+library(survival)
+library(survminer)
 ```
+
+# Background
+
+Baseball players elected to the Hall of Fame are likely to have relatively high self-esteem due to repeated achievement.
 
 # Data
 
-The authors used the 2002 Lahman database, Version 5.0 ([2002](#Lahman2002)). I downloaded the Access database and exported the **HallOfFame** and **Master** tables to csv.^[There is also a zipped csv archive, but it lacks column headers.]
+Abel and Kruger ([2005](#Abel2005)) analyzed data from the 2002 Lahman database, Version 5.0 ([2002](#Lahman2002)). The present analysis uses the same database, and also the R version of the 2021 edition of the Lahman database. The **Lahman** R package v10.0-1 ([2022](#Lahman2022)) is continuously updated and available for download on CRAN.
 
 ```{r warning=FALSE, message=FALSE}
-Master <- read_csv("../data/lahman_50-2k/Master.csv")
-HallOfFame <- read_csv("../data/lahman_50-2k/HallOfFame.csv")
+# 2002 Lahman database (v5.0)
+MasterV5 <- read_csv("../data/lahman_50-2k/Master.csv")
+HallOfFameV5 <- read_csv("../data/lahman_50-2k/HallOfFame.csv")
+FieldingV5 <- read_csv("../data/lahman_50-2k/Fielding.csv")
+
+# 2021 Lahman database (v10.0-1)
+data("People", "HallOfFame", "Fielding", "Appearances", package = "Lahman")
 ```
 
-`Master` includes non-players (executives, announcers, and umpires) who were inducted into the Hall of Fame. Actual players are identified by a non-empty `playerID` column. Of the `r comma(nrow(Master))` rows in the data set, `r comma(n_distinct(Master$playerID))` are players.^[To confirm my understanding, I compared the `playerID` values from the **Batting**, **Fielding**, and **Pitching** tables. The union of values is the same as those in `Master`.]
+The `Master` data set from v5.0 is replaced with `People` in v10.0-1. It includes both players and non-players (executives, announcers, and umpires) inducted into the Hall of Fame. Actual players are identified by presence in the `Appearances` data set (v10.0-1) or a non-null `playerID` (v5.0). Of the `r comma(nrow(People))` rows in the data set, `r comma(n_distinct(Appearances$playerID))` are players.
 
-```{r include=FALSE, eval=FALSE}
-Batting <- read_csv("../data/lahman_50-2k/Batting.csv")
-Fielding <- read_csv("../data/lahman_50-2k/Fielding.csv")
-Pitching <- read_csv("../data/lahman_50-2k/Pitching.csv")
+Abel and Kruger ([2005](#Abel2005)) filtered for players in the Hall of Fame who had been inducted while still alive as of 2002. They matched each Hall of Fame player to players of the same birth year who were also alive in the induction year.
 
-player_ids <- c(Batting$playerID, Fielding$playerID, Pitching$playerID) %>% unique()
+```{r}
+hof_v5 <- HallOfFameV5 %>% 
+  inner_join(MasterV5, by = "hofID") %>%
+  filter(
+    inducted == "Y",
+    # Inducted as a player _and_ has a playerID identifier (need both)
+    category == "Player", !is.na(playerID),
+    yearid <= 2002,
+    coalesce(deathYear, 9999) > yearid
+   ) %>% 
+  mutate(inductedAge = yearid - birthYear) %>%
+  select(playerID, birthYear, deathYear, inductedYear = yearid)
+  
+ctrl_v5 <- hof_v5 %>%
+  inner_join(MasterV5, by = "birthYear", suffix = c(".hof", "")) %>% 
+  filter(
+    !is.na(playerID),
+    coalesce(deathYear, 9999) > inductedYear,
+    playerID != playerID.hof
+  ) %>%
+  anti_join(hof_v5, by = "playerID") %>%
+  select(playerID, birthYear, deathYear, inductedYear, playerID.hof)
 
-# Yes, playerID indicates an actual player.
-Master %>% filter(!is.na(playerID)) %>% nrow()
-Master %>% filter(playerID %in% player_ids) %>% nrow()
-Master %>% filter(!playerID %in% player_ids & !is.na(playerID)) %>% nrow()
+fielding_v5 <- FieldingV5 %>%
+  # There are so few designated hitters, assume they play first base.
+  mutate(POS = if_else(POS == "DH", "1B", POS)) %>%
+  group_by(playerID) %>%
+  mutate(seasons = max(yearID) - min(yearID) + 1, games = sum(G)) %>%
+  ungroup() %>%
+  group_by(playerID, seasons, games, position = POS) %>%
+  summarise(.groups = "drop", position_games = sum(G)) %>%
+  group_by(playerID) %>%
+  slice_max(order_by = position_games)
+
+dat_v5 <- bind_rows(Y = hof_v5, N = ctrl_v5, .id = "hof") %>%
+  inner_join(MasterV5 %>% select(playerID, height, weight), by = "playerID") %>%
+  inner_join(fielding_v5, by = "playerID") %>%
+  mutate(
+    hof = factor(hof, levels = c("N", "Y")),
+    bmi = weight / if_else(height == 0, NA_real_, height)^2 * 703,
+    induction_year_age = inductedYear - birthYear,
+    # follow-up time is earlier of two dates: death or data set date.
+    fu_year = coalesce(deathYear, max(MasterV5$deathYear, na.rm = TRUE)),
+    fu_time = fu_year - inductedYear,
+    fu_status = if_else(is.na(deathYear), 0, 1)
+  )
 ```
 
-The *Results* section of the article summarizes the row counts of the analysis data set derived from these tables (page 961).
+Abel and Kruger ([2005](#Abel2005)) report,
 
 > One hundred and forty-three (143) players in the Hall of Fame had been inducted into the Baseball Hall of Fame while still alive as of 2002. These were age-matched with 3,430 players. The mean age of the Hall of Famers at time of induction
 was 57.5 years (SD $\pm$ 12.4). A total of 1,695 of these players had died by the end of 2002.
 
-The code chunk below identifies the 143 Hall of Famers as object `hall_of_famers`. The criteria is in the filter: 1) inducted into the Hall, 2) as a player, 3) through 2002, and 4) while alive.
-
-```{r}
-hall_of_famers <- HallOfFame %>% 
-  inner_join(Master, by = "hofID") %>%
-  filter(
-    inducted == "Y",
-    # Inducted as a player _and_ has a playerID identifier (need both!)
-    category == "Player", !is.na(playerID),
-    yearid <= 2002,
-    coalesce(deathYear, 9999) > yearid
-  ) %>% 
-  mutate(age_at_induction = yearid - birthYear) %>%
-  select(playerID, inductionYear = yearid, birthYear, age_at_induction)
-```
-
-Does this match the article? Not quite. I get 144 rows^[I get 143 rows if I exclude the 2002 induction year, but the age mean and SD are still off.], and the mean $\pm$ SD age at induction is slightly off.
+My data set matches the Hall of Fame players closely, but has about twice as many age-matched controls.
 
 ```{r collapse=TRUE}
-# Does not match 143 in article.
-nrow(hall_of_famers)
+# Players in Hall of Fame. Compare to 143.
+dat_v5 %>% filter(hof == "Y") %>% nrow()
 
-# Does not match 57.5 in article.
-mean(hall_of_famers$age_at_induction)
+# Age-matched players. Compare to 3,430.
+dat_v5 %>% filter(hof == "N") %>% pull(playerID) %>% n_distinct()
 
-# Does not match 12.4 in article.
-sd(hall_of_famers$age_at_induction)
+# Mean age of Hall of Famers. Compare to 57.5, SD 12.4.
+dat_v5 %>% filter(hof == "Y") %>% 
+  summarize(
+    mean = mean(induction_year_age),
+    sd = sd(induction_year_age)
+  )
+
+# Deaths. Compare to 1,695.
+dat_v5 %>% filter(deathYear <= 2002) %>% pull(playerID) %>% n_distinct()
 ```
+
+Abel and Kruger ([2005](#Abel2005)) summarize their findings as:
+
+> Hall-of-Famers died significantly earlier than their controls. The median length of post-induction survival for the Hall of
+Famers was 18 years (95% CI ¼ 15.0–21.0) versus 23 years
+(CI ¼ 22.1–23.9) for matched controls (Odds ratio [OR] ¼ 1.37;
+95% CI ¼ 1.08–1.73). A higher percentage (64%, n ¼ 92) of the
+Hall of Famers were also dead compared with controls (47%,
+n ¼ 1,603) who were the same age at the time of the Hall of
+Famer’s induction (v2 ¼ 17:1, df ¼ 1, p < .001. Player position and
+career length did not significantly affect post-induction survival.
+BMI, however, did affect survival significantly. Hall-of-Famer’s
+had a mean (SD) BMI of 25.2  1.8 versus 24.7  1.5 for controls.
+This difference was statistically significant (tn ¼ 3,114 ¼ 3.6, p < .001.)
+
+```{r eval=FALSE}
+# Median post-induction survival
+mdl_v5 <- coxph(Surv(fu_time, fu_status) ~ hof + seasons + bmi + position, data = dat_v5)
+mdl_v5
+gtsummary::tbl_regression(mdl_v5, exponentiate = TRUE)
+
+survfit(Surv(fu_time, fu_status) ~ hof, data = dat_v5)
+
+dat_v5 %>% filter(position == "DH") %>% count(playerID)
+?predict.coxph(
+  mdl_v5, 
+  newdata = list(hof = "Y", bmi = 25, position = "C", seasons = 10),
+  type = "survival"
+)
+dat_v5 %>% select(hof, bmi, position) %>% summary()
+```
+
+
+```{r eval=FALSE}
+
+
+n_distinct(ctrl_v5$playerID)
+
+ctrl_v5 %>% ggplot() + geom_histogram(aes(x = birthYear), binwidth = 1)
+ctrl_v5 %>% count(birthYear)
+MasterV5 %>% filter(deathYear == 0)
+
+summary(hof_v5$deathYear)
+hof_v10 <- HallOfFame %>% 
+  inner_join(People, by = "playerID") %>%
+  filter(
+    inducted == "Y",
+    category == "Player", 
+    coalesce(deathYear, 9999) > yearID
+  ) %>% 
+  mutate(inductedAge = yearID - birthYear) %>%
+  select(playerID, inductedYear = yearID, birthYear, inductedAge, deathYear)
+
+hof2002 <- hof %>% filter(inductedYear <= 2002)
+
+cohort_0 <- hof %>%
+  inner_join(People, by = "birthYear", suffix = c(".hof", "")) %>% 
+  filter(!is.na(debut)) %>%
+  # semi_join(Appearances, by = "playerID") %>% 
+  filter(
+    # !is.na(debut),
+   # deathYear != 0, # must be a placeholder val.
+    coalesce(deathYear, 9999) > inductedYear
+  ) %>%
+  anti_join(hof, by = "playerID")
+
+cohort <- cohort_0 %>% 
+  select(playerID, birthYear, deathYear, nameFirst, nameLast) %>%
+  unique()
+
+cohort2002 <- cohort_0 %>% 
+  filter(inductedYear <= 2002) %>% 
+  select(playerID, birthYear, deathYear, nameFirst, nameLast) %>%
+  unique()
+
+dat <- bind_rows(
+  HOF = hof %>% select(playerID),
+  CONTROL = cohort %>% select(playerID),
+  .id = "hof"
+) %>%
+  inner_join(People, by = "playerID") %>%
+  inner_join(career, by = "playerID") %>%
+  mutate(bmi = weight / if_else(height == 0, NA_integer_, height)^2 * 703) %>%
+  select(playerID, hof, bmi, position, seasons, everything())
+
+dat2002 <- bind_rows(
+  HOF = hof2002 %>% select(playerID),
+  CONTROL = cohort2002 %>% select(playerID),
+  .id = "hof"
+) %>%
+  inner_join(People, by = "playerID") %>%
+  inner_join(career, by = "playerID") %>%
+  mutate(bmi = weight / if_else(height == 0, NA_integer_, height)^2 * 703) %>%
+  select(playerID, hof, bmi, position, seasons, everything())
+
+```
+
+> Hall-of-Famers died significantly earlier than their controls. The median length of post-induction survival for the Hall of Famers was 18 years (95% CI = 15.0–21.0) versus 23 years (CI = 22.1–23.9) for matched controls (Odds ratio [OR] = 1.37; 95% CI = 1.08–1.73). 
 
 The *Methods and Materials* section of the article elaborates the age-matching criteria (page 960).
 
@@ -91,57 +231,93 @@ The *Methods and Materials* section of the article elaborates the age-matching c
 
 The code chunk below identifies every player who shares the same age as a Hall of Famer _and_ was alive at that Hall of Famer's induction year. Note that a player may have been alive for one Hall of Famer's induction, but not for the later induction of another Hall of Famer with the same birth year. 
 
-```{r}
-age_matched_cohort <- Master %>%
-  inner_join(hall_of_famers, by = "birthYear", suffix = c("", ".hof")) %>%
-  filter(
-    !is.na(playerID),
-    coalesce(deathYear, 9999) > inductionYear
-  ) %>%
-  anti_join(hall_of_famers, by = "playerID") %>%
-  select(playerID, birthYear, deathYear, nameFirst, nameLast, hofID) %>%
-  # A player can match multiple Hall of Famers
-  unique()
+```{r eval=FALSE}
+
+# "Hall-of-Famer’s had a mean (+/-SD) BMI of 25.2 +/- 1.8 versus 24.7 +/- 1.5 for controls"
+dat %>% group_by(hof) %>% summarize(.groups = "drop", n = n(), meanBMI = mean(bmi, na.rm = TRUE), sdBMI = sd(bmi, na.rm = TRUE))
+t.test(bmi ~ hof, data = dat)
+dat %>% gtsummary::tbl_summary(by = hof, include = bmi, statistic = list(bmi ~ "{mean}, {sd}")) %>% gtsummary::add_p()
+
+# "A higher percentage (64%, n = 92) of the Hall of Famers were also dead..."
+# I have n = 90.
+hall_of_famers %>% mutate(is_alive = if_else(coalesce(deathYear, 9999) > 2002, TRUE, FALSE)) %>% janitor::tabyl(is_alive)
+
+# "...compared with controls (47%, n = 1,603) who were the same age at the time of the Hall of Famer’s induction..."
+# I have n = 52%, n = 3,401.
+cohort %>% mutate(is_alive = if_else(coalesce(deathYear, 9999) > 2002, TRUE, FALSE)) %>% janitor::tabyl(is_alive)
+
+cohort %>% count(playerID, sort = TRUE)
 ```
 
-Does this match the article? Not even close. `age_matched_cohort` should have 3,430 players. Instead, it has `r scales::comma(nrow(age_matched_cohort))` players. I tried defining age-match as sharing both birth year and birth month, but that yielded a result set that was way too *small*.
 
-```{r collapse=TRUE}
-nrow(age_matched_cohort)
+Does this match the article? Not even close. `cohort` should have 3,430 players. Instead, it has `scales::comma(nrow(cohort))` players. I tried defining age-match as sharing both birth year and birth month, but that yielded a result set that was way too *small*.
+
+```{r eval=FALSE, collapse=TRUE}
+nrow(cohort)
 ```
+
+## 
 
 ## What went wrong?
 
-What went wrong? Let's audit 20 random players of `age_matched_cohort`. Since `age_matched_cohort` has so many more players than it should have, at least one of these players should be unjustified.
+What went wrong? Let's audit 20 random players of `cohort`. Since `cohort` has so many more players than it should have, at least one of these players should be unjustified.
 
-```{r}
+```{r eval=FALSE}
 set.seed(1234)
-random_rownums <- runif(20, 1, nrow(age_matched_cohort)) %>% as.integer()
+random_rownums <- runif(20, 1, nrow(cohort)) %>% as.integer()
 
-matches <- age_matched_cohort[random_rownums, ] %>%
+matches <- cohort[random_rownums, ] %>%
   inner_join(hall_of_famers, by = "birthYear", suffix = c(".cohort", ".hof")) %>%
-  filter(coalesce(deathYear, 9999) > inductionYear,
+  filter(coalesce(deathYear.cohort, 9999) > inductedYear,
          playerID.cohort != playerID.hof) %>%
-  select(playerID.cohort, nameFirst, nameLast, birthYear, deathYear,
-         playerID.hof, inductionYear)
+  select(playerID.cohort, nameFirst, nameLast, birthYear, deathYear = deathYear.cohort,
+         playerID.hof, inductedYear)
 ```
 
 A player is age-matched if 1) there was a Hall of Famer inducted while alive who shares the same birth year, and 2) they were alive during the induction year too. Are these players correctly age-matched correctly? Yes, all 20 are age-matched.
 
-```{r collapse=TRUE}
+```{r eval=FALSE, collapse=TRUE}
 matches %>% select(playerID.cohort) %>% unique() %>% nrow()
+People %>% filter(hofID == "adamsbo03h")
 ```
 
 Let's look at some of the matches. Ethan Allen was still alive when Red Ruffing was inducted in 1967. Both were born in 1904. Art Bues was alive when Tris Speaker was inducted in 1937, and both were born in 1888. Douglas Whammy shared the same birth year as three Hall of Famers inducted while still alive. Douglas Whammy was still alive as of 2002.
 
-```{r}
-matches %>% rename(inducted = inductionYear) %>% arrange(playerID.cohort)
+```{r eval=FALSE}
+matches %>% rename(inducted = inductedYear) %>% arrange(playerID.cohort)
 ```
 
 Why is my data set so much longer than Abel and Kruger's - what am I missing here?
+
+# Smith's Critique
+
+smith ([2011](#Smith2011)) commented on the Abel and Kruger ([2005](#Abel2005)) study with two criticisms. One, the result seems implausible on its face because it contradicts a wide body of research, and attributes a large effect to a single event, especially considering that the control group are also elite athletes. The second criticism is that the data set is flawed. smith ([2011](#Smith2011)) explains that the Lahman database has incomplete data, including missing death dates. Abel and Kruger ([2005](#Abel2005)) were assuming everyone with a missing death date was still alive, and since most missing death dates are for obscure players, their data biased upward the non-Hall of Fame players' lifetimes.
+
+Unfortunately, I cannot demonstrate this flaw in the data, and Smith ([2011](#Smith2011)) only points out that players born in the 1800s must certainly be deceased.
+
+```{r eval=FALSE}
+Master %>% filter(birthYear == 0) %>% nrow()
+Master %>% filter(deathYear == 0) %>% nrow()
+Master %>% filter(birthYear < 1900, is.na(deathYear)) %>% nrow()
+Master %>% filter(birthYear < 1900, is.na(deathYear)) %>% nrow()
+People %>% filter(playerID == "adamsji01")
+People %>% filter(birthYear < 1900, is.na(deathYear)) %>% nrow()
+Master %>%
+  filter(!is.na(birthYear), birthYear != 0, deathYear != 0) %>%
+  mutate(
+    alive = if_else(is.na(deathYear), "Alive", "Deceased"),
+    age2002 = coalesce(deathYear, 2002) - birthYear
+  ) %>%
+  ggplot() + geom_histogram(aes(x = age2002))
+```
+
 
 # References
 
 <a id="Abel2005"></a>Ernest L. Abel & Michael L. Kruger (2005) The Longevity of Baseball Hall of Famers Compared to Other Players, Death Studies, 29:10, 959-963, DOI: [10.1080/07481180500299493](https://doi.org/10.1080/07481180500299493). [PDF](http://www.med.mcgill.ca/epidemiology/hanley/bios601/CandHchapter06/baseball_players.pdf).
 
-<a id="Lahman2002"></a>[Sean Lahman's Baseball Database](https://www.seanlahman.com/baseball-archive/statistics/).
+<a id="Lahman2002">Lahman, S. (2002). The Baseball Archive v.5.0. Available at <https://www.seanlahman.com/baseball-archive/statistics/>.
+
+<a id="Lahman2022"></a>Friendly M, Dalzell C, Monkman M, Murphy D (2022). _Lahman: Sean 'Lahman' Baseball Database_. R package version 10.0-1, <https://CRAN.R-project.org/package=Lahman>.
+
+<a id="Smith2011"></a>Smith G. The Baseball Hall of Fame is not the kiss of death. Death Stud. 2011 Nov-Dec;35(10):949-55. doi: [10.1080/07481187.2011.553337](https://doi.org/10.1080/07481187.2011.553337). PMID: 24501860. [PDF](https://www.researchgate.net/profile/Gary-Smith-8/publication/260118629_The_Baseball_Hall_of_Fame_Is_Not_the_Kiss_of_Death/links/5485b3620cf24356db610de9/The-Baseball-Hall-of-Fame-Is-Not-the-Kiss-of-Death.pdf)
