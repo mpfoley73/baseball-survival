@@ -291,24 +291,24 @@ Why is my data set so much longer than Abel and Kruger's - what am I missing her
 
 # Smith's Critique
 
-smith ([2011](#Smith2011)) commented on the Abel and Kruger ([2005](#Abel2005)) study with two criticisms. One, the result seems implausible on its face because it contradicts a wide body of research, and attributes a large effect to a single event, especially considering that the control group are also elite athletes. The second criticism is that the data set is flawed. smith ([2011](#Smith2011)) explains that the Lahman database has incomplete data, including missing death dates. Abel and Kruger ([2005](#Abel2005)) were assuming everyone with a missing death date was still alive, and since most missing death dates are for obscure players, their data biased upward the non-Hall of Fame players' lifetimes.
+Smith ([2011](#Smith2011)) commented on the Abel and Kruger ([2005](#Abel2005)) study with two criticisms. The first is that the result seems implausible on its face because it contradicts a wide body of research, and attributes a large effect to a single event, especially considering that the control group are also elite athletes. The second criticism is that the data set is flawed. Smith ([2011](#Smith2011)) explains that the Lahman database has incomplete data, including missing death dates. Abel and Kruger ([2005](#Abel2005)) were assuming everyone with a missing death date was still alive, and since most missing death dates are for obscure players, non-Hall of Fame players' lifetimes were biased upward.
 
-Unfortunately, I cannot demonstrate this flaw in the data, and Smith ([2011](#Smith2011)) only points out that players born in the 1800s must certainly be deceased.
+Smith ([2011](#Smith2011)) only points out that players born in the 1800s must certainly be deceased by 2002. `r dat_v5 %>% filter(birthYear != 0, birthYear < 1900, is.na(deathYear)) %>% nrow()` players (`r dat_v5 %>% summarize(born1800 = mean(birthYear != 0 & birthYear < 1900 & is.na(deathYear), na.rm = TRUE)) %>% pull(born1800) %>% percent(.1)`) in the data set with no death date were born in the 1800s. The distribution plot shows ages at 2002 that surpass 150 years. No Hall of Fame players born in the 1800s had a missing death date.
 
 ```{r eval=FALSE}
-Master %>% filter(birthYear == 0) %>% nrow()
-Master %>% filter(deathYear == 0) %>% nrow()
-Master %>% filter(birthYear < 1900, is.na(deathYear)) %>% nrow()
-Master %>% filter(birthYear < 1900, is.na(deathYear)) %>% nrow()
-People %>% filter(playerID == "adamsji01")
-People %>% filter(birthYear < 1900, is.na(deathYear)) %>% nrow()
-Master %>%
-  filter(!is.na(birthYear), birthYear != 0, deathYear != 0) %>%
+dat_v5 %>%
+  filter(!is.na(birthYear), birthYear != 0, coalesce(deathYear, 9999) != 0) %>% 
   mutate(
     alive = if_else(is.na(deathYear), "Alive", "Deceased"),
     age2002 = coalesce(deathYear, 2002) - birthYear
   ) %>%
-  ggplot() + geom_histogram(aes(x = age2002))
+  ggplot(aes(x = age2002, fill = alive)) + 
+  geom_density(alpha = .4, color = "gray40") +
+  theme_light() +
+  theme(legend.position = "top") +
+  labs(title = "Fig. 1. Lahman V5 data set age distribution.",
+       x = "Age at death, or at end of 2002 (if alive)", fill = NULL) +
+  facet_wrap(facets = vars(hof))
 ```
 
 
